@@ -46,10 +46,13 @@ test('buildFarm creates an instanced, animated farm with a stable integration AP
     },
   };
   const { buildFarm, farm } = await import('../src/farm.js');
+  const {farmClear}=await import('../src/farm-layout.js');
+  const {discIsClear}=await import('../src/animal-collision.js');
   const scene = new T.Scene();
   const tracks=[];
   const built = buildFarm(scene,undefined,undefined,undefined,mark=>tracks.push(mark));
   assert.equal(typeof built.clear, 'function');
+  assert.equal(typeof built.animalClear,'function');
   assert.equal(typeof built.tick, 'function');
   assert.ok(built.ground?.isMesh);
   assert.ok(built.stats.instances > 1200);
@@ -66,10 +69,43 @@ test('buildFarm creates an instanced, animated farm with a stable integration AP
   const animated = [];
   scene.traverse(object => { if (object.userData.farmAnimal) animated.push(object); });
   assert.ok(animated.length >= 18);
+  for(const trough of (await import('../src/farm-layout.js')).farmStations.troughs){
+    assert.equal(built.animalClear(trough.x,trough.z),false,`${trough.kind} trough blocks livestock bodies`);
+  }
+  assert.equal(built.animalClear(built.vehicle.pose.x,built.vehicle.pose.z),false,'tractor blocks livestock');
+  assert.equal(built.animalClear(built.vehicle.wagon.x,built.vehicle.wagon.z),false,'wagon blocks livestock');
+  assert.equal(built.vehicle.blocks(built.vehicle.pose.x+1.45,built.vehicle.pose.z,0),false,'point is outside the tractor chassis');
+  assert.equal(built.vehicle.blocks(built.vehicle.pose.x+1.45,built.vehicle.pose.z,.40),true,'animal radius expands tractor clearance');
+
+  const feedingTargets=[];
+  for(const creature of animated){
+    const kind=creature.userData.farmAnimal,m=creature.userData.motion,trough=(await import('../src/farm-layout.js')).farmStations.troughs.find(item=>item.kind===kind);
+    built.work.animals[kind].fed=110;
+    if(!m.inStall&&m.phase%3.1<2.28&&!feedingTargets.some(item=>item.kind===kind)){
+      feedingTargets.push({kind,creature,trough});
+    }
+  }
+  const northHen=animated.find(creature=>creature.userData.farmAnimal==='chicken'&&creature.userData.motion.baseZ>49&&creature.userData.motion.phase%3.1<2.28);
+  if(northHen&&!feedingTargets.some(item=>item.creature===northHen))feedingTargets.push({kind:'chicken',creature:northHen,
+    trough:(await import('../src/farm-layout.js')).farmStations.troughs.find(item=>item.kind==='chicken')});
+  for(let i=0;i<360;i++)built.tick(i/60,1/60,.2);
+  for(const target of feedingTargets){
+    const distance=Math.hypot(target.creature.position.x-target.trough.x,target.creature.position.z-target.trough.z);
+    assert.ok(distance<3.55,`${target.kind} can still reach its feeding station (${distance.toFixed(2)}m from trough)`);
+    const m=target.creature.userData.motion;
+    assert.equal(discIsClear(built.animalClear,target.creature.position.x,target.creature.position.z,m.collisionRadius),true);
+  }
   const before = animated[0].rotation.y;
   built.tick(2.4, 1 / 60, .7, { x: -75, z: 24 });
   assert.notEqual(animated[0].rotation.y, before);
-  for(let i=1;i<=480;i++)built.tick(2.4+i/60,1/60,.2);
+  for(let i=1;i<=480;i++){
+    built.tick(2.4+i/60,1/60,.2);
+    if(i%24===0)for(const creature of animated){
+      const motion=creature.userData.motion;
+      if(!motion.inStall)assert.equal(discIsClear(farmClear,creature.position.x,creature.position.z,motion.collisionRadius),true,
+        `${creature.userData.farmAnimal} body stays outside farm walls and fences`);
+    }
+  }
   assert.ok(tracks.length>8,'walking livestock leave discrete touchdown prints');
   assert.ok(tracks.some(mark=>mark.kind==='hoof')&&tracks.some(mark=>mark.kind==='bird'));
   for(const mark of tracks){
@@ -84,7 +120,7 @@ test('buildFarm creates an instanced, animated farm with a stable integration AP
   built.vehicle.mount();
   assert.equal(built.vehicle.togglePlow(),true);
   const serviceRoute=[[-63.2,24.6],[-56.1,25.6],[-49.8,29.1],[-49.8,36],[-49.8,49],[-49.8,63]];
-  for(const [x,z] of serviceRoute){
+  for(const [routeIndex,[x,z]] of serviceRoute.entries()){
     let reached=false;
     for(let i=0;i<1350;i++){
       const pose=built.vehicle.pose,dx=x-pose.x,dz=z-pose.z;
@@ -94,6 +130,12 @@ test('buildFarm creates an instanced, animated farm with a stable integration AP
       built.drive(.033,Math.abs(turn)<.74?.61:.355,Math.max(-1,Math.min(1,-turn*2.45)));
     }
     assert.ok(reached,`tractor reaches ${x}, ${z} through the equipment gate`);
+    built.tick(200+routeIndex,1/60,.1);
+    for(const creature of animated){
+      const motion=creature.userData.motion;
+      if(!motion.inStall)assert.equal(discIsClear(built.animalClear,creature.position.x,creature.position.z,motion.collisionRadius),true,
+        'livestock vacate the moving tractor and wagon footprint');
+    }
   }
   assert.equal(built.work.fields.pumpkins.stage,'tilled','driving the plow across the bare field prepares it');
 });

@@ -75,16 +75,17 @@ function sign(root,b,t,title){
 }
 export function buildWoodland(root,leaves){
   const ground=easternGround(root);const b=new Builder(root),trailGround=trailMesh(root,b);
+  const trunks=new Map(),collisionStats={trees:0,lanterns:0,logs:0,rocks:0},collisionSamples={};
+  function register(x,z,r,kind='trees',crown=null){
+    const k=Math.floor(x/5)+','+Math.floor(z/5);if(!trunks.has(k))trunks.set(k,[]);trunks.get(k).push({x,z,r,crown});collisionStats[kind]++;
+    collisionSamples[kind]??=Object.freeze({x,z,r});
+  }
   for(const [t,title] of [[.024,'Thornmere Castle'],[.36,'Pinewood Way'],[.73,'Castle Road'],[.967,'Thornmere Castle']])sign(root,b,t,title);
   for(let j=1;j<16;j++){
     const p=trail.getPointAt(j/16),d=trail.getTangentAt(j/16),s=j%2?1:-1,x=p.x+s*1.82*d.z,z=p.z-s*1.82*d.x;
-    if(!catacombTerrainCut(x,z,2.5))lantern(b,x,height(x,z),z);
+    if(!catacombTerrainCut(x,z,2.5)){lantern(b,x,height(x,z),z);register(x,z,.20,'lanterns');}
   }
   b.finish();
-  const trunks=new Map();
-  function register(x,z,r){
-    const k=Math.floor(x/5)+','+Math.floor(z/5);if(!trunks.has(k))trunks.set(k,[]);trunks.get(k).push({x,z,r});
-  }
   for(let cx=25;cx<219;cx+=24)for(let cz=-98;cz<62;cz+=24){
     const trees=new Builder(root);
     for(let j=0;j<33;j++){
@@ -93,7 +94,8 @@ export function buildWoodland(root,leaves){
       if(x>estate.x-20&&x<estate.x+18&&z>estate.z+23&&z<estate.z+53&&Math.abs(x-estate.x)<9)continue;
       const s=range(.87,1.65);if(j%3===0)beech(trees,x,z,s);else pine(trees,x,z,s);
       if(j%3===0)leaves?.add(x,height(x,z)+4.9*s,z,s*1.4);
-      register(x,z,s*.24+.16);
+      const pineCrown=j%3===0?null:{base:height(x,z)+1.6*s,radius:1.87*s};
+      register(x,z,s*.24+.16,'trees',pineCrown);
     }
     trees.finish();
   }
@@ -101,7 +103,7 @@ export function buildWoodland(root,leaves){
   for(let i=0;i<2250;i++){
     const t=range(.05,.98),p=trail.getPointAt(t),d=trail.getTangentAt(t),s=(i%2?-1:1)*range(1.65,9),x=p.x+s*d.z,z=p.z-s*d.x,y=height(x,z);
     if(trailDistance(x,z)<1.58||catacombTerrainCut(x,z,1.25))continue;
-    if(i%8===0){low.put('stone',tint('#777a71'),x,y+.06,z,.68,.30,.52,.1,t*8,0,'stone');continue;}
+    if(i%8===0){low.put('stone',tint('#777a71'),x,y+.06,z,.68,.30,.52,.1,t*8,0,'stone');register(x,z,.44,'rocks');continue;}
     if(i%11===0){for(let j=0;j<3;j++){const xx=x+j*.12;low.put('cyl','#e6d9b7',xx,y+.09,z,.046,.18,.046);low.put('ball','#b86743',xx,y+.18,z,.17,.09,.17);}continue;}
     for(let j=0;j<6;j++){const a=j*2.4+i;low.put('leaf',tint(i%3?'#708b4f':'#899f56'),x+.13*Math.sin(a),y+.15,z+.14*Math.cos(a),.105,.38,.14,.65*Math.cos(a),0,-.65*Math.sin(a),'plant');}
   }
@@ -112,16 +114,21 @@ export function buildWoodland(root,leaves){
       const len=range(1.1,2.7),a=range(0,TAU);
       low.put('cyl',tint('#51473b'),x,y+.18,z,.24,len,.24,Math.PI/2,a,0,'agedWood');
       low.put('cyl','#807560',x+Math.cos(a)*len*.49,y+.18,z-Math.sin(a)*len*.49,.25,.035,.25,Math.PI/2,a,0,'agedWood');
+      register(x,z,len*.5+.16,'logs');
     }else{
       const s=range(.16,.48);low.put('stone',tint(pick(['#676c66','#77796f','#89857a']),.08),x,y+s*.14,z,s*1.25,s*.43,s,range(-.3,.3),range(0,TAU),0,'stone');
+      if(s>.28)register(x,z,s*.72+.08,'rocks');
     }
   }
   low.finish();
-  const clear=(x,z)=>{
+  const clear=(x,z,animalHeight=0)=>{
     const cx=Math.floor(x/5),cz=Math.floor(z/5);
-    for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)for(const t of trunks.get((cx+i)+','+(cz+j))||[])
-      if((x-t.x)**2+(z-t.z)**2<t.r*t.r)return false;
+    for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)for(const t of trunks.get((cx+i)+','+(cz+j))||[]){
+      const d=(x-t.x)**2+(z-t.z)**2;
+      if(d<t.r*t.r)return false;
+      if(animalHeight&&t.crown&&d<t.crown.radius**2&&height(x,z)+animalHeight>=t.crown.base)return false;
+    }
     return true;
   };
-  return {clear,ground,trailGround};
+  return {clear,ground,trailGround,collisionStats:Object.freeze(collisionStats),collisionSamples:Object.freeze(collisionSamples)};
 }

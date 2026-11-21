@@ -3,10 +3,11 @@ import {brookStage} from './brook.js';
 import * as T from 'three';
 import { height,walkHeight,riverWidth,riverX,inPlot } from './land.js';
 import { range } from './model.js';
+import {springZ} from './layout.js';
 
 function surfaceHeight(x,z){
   const ground=walkHeight(x,z);
-  return Math.abs(z)<53&&Math.abs(x-riverX(z))<riverWidth(z)+.23 ? Math.max(ground,brookStage(z)) : ground;
+  return z>=springZ&&z<53&&Math.abs(x-riverX(z))<riverWidth(z)+.23 ? Math.max(ground,brookStage(z)) : ground;
 }
 
 export function buildWeatherEffects(scene,rainSurface=()=>-Infinity) {

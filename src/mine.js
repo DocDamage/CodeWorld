@@ -93,9 +93,10 @@ function buildCart(scene,state,oreMaterials){
 function buildYard(scene,oreMaterials){
   const root=new T.Group();scene.add(root);const b=new Builder(root);
   const a=MINE.portal,c=MINE.yard,length=c.z-a.z,mid=(a.z+c.z)/2;
-  b.put('box','#55504a',a.x,(a.y+c.y)/2-.10,mid,2.18,.20,length+.16,0,0,0,'masonry');
-  for(const x of [-.63,.63])b.put('box',rail,a.x+x,(a.y+c.y)/2+.08,mid,.075,.075,length,0,0,0,'iron');
-  for(let z=a.z+.18;z<c.z+.1;z+=.66)b.put('box',timber,a.x,(a.y+c.y)/2,z,1.78,.13,.22,0,0,0,'agedWood');
+  const tilt=Math.atan2(a.y-c.y,length);
+  b.put('box','#55504a',a.x,(a.y+c.y)/2-.10,mid,2.18,.20,length+.16,tilt,0,0,'masonry');
+  for(const x of [-.63,.63])b.beam(rail,v(a.x+x,a.y+.08,a.z),v(c.x+x,c.y+.08,c.z),.075,.075,'box','iron');
+  for(let z=a.z+.18;z<c.z+.1;z+=.66)b.put('box',timber,a.x,a.y+(c.y-a.y)*(z-a.z)/length,z,1.78,.13,.22,tilt,0,0,'agedWood');
   portal(root,MINE.portal,'BRIARWICK MINE',0);
   b.group(MINE.yard.x,MINE.yard.y,MINE.yard.z+.62,0,()=>{
     for(const side of [-1,1])b.put('box','#54402f',side*1.65,1.38,0,.24,2.76,.24,0,0,0,'agedWood');

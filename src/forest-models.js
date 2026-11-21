@@ -29,15 +29,42 @@ function part(parent){
   return {group,add,branch,finish};
 }
 
-function articulatedLeg(root,{color,footColor,x,y,z,length,thick,footLength,footZ=0}){
+function articulatedLeg(root,{color,footColor,x,y,z,length,thick,footLength,footZ=0,kneeZ=0,cloven=false,birdFoot=false,paw=false,label='animal'}){
   const upperLength=length*.48,lowerLength=length-upperLength;
   const upper=part(root);upper.group.position.set(x,y,z);
-  upper.add('round',color,0,-upperLength*.47,0,thick*1.3,upperLength*.58,thick*1.45);
-  const lower=part(upper.group);lower.group.position.y=-upperLength;
-  lower.branch(color,0,0,0,0,-lowerLength,footZ*.22,thick*.72);
-  const foot=part(lower.group);foot.group.position.set(0,-lowerLength,footZ*.22);
-  foot.add('round',footColor,0,-.022,footLength*.34,thick*.82,.05,footLength);
-  const leg={upper:upper.group,lower:lower.group,foot:foot.group,x,z:z+footZ,side:x<0?'left':'right',
+  if(cloven){
+    // The hind stifle points forward and the hock back. The foreleg carries
+    // its weight through a much straighter cannon bone below the carpus.
+    const stifle=z<0?.092:-.032;
+    upper.branch(color,0,.012,0,0,-upperLength*.46,stifle,thick*1.32);
+    upper.add('round',color,0,-upperLength*.23,stifle*.52,thick*(z<0?1.8:1.35),upperLength*.81,thick*(z<0?2.05:1.58));
+    upper.branch(color,0,-upperLength*.46,stifle,0,-upperLength,kneeZ,thick);
+    upper.add('round',color,0,-upperLength,kneeZ,thick*.89,thick,thick*1.02);
+  }else{
+    upper.branch(color,0,0,0,0,-upperLength,kneeZ,thick*.92);
+    upper.add('round',color,0,-upperLength*.39,kneeZ*.22,thick*1.3,upperLength*.72,thick*1.45);
+  }
+  const lower=part(upper.group);lower.group.position.set(0,-upperLength,kneeZ);
+  if(cloven){
+    const fetlockZ=footZ-kneeZ-.033;
+    lower.branch(color,0,0,0,0,-lowerLength*.83,fetlockZ,thick*.68);
+    lower.branch(color,0,-lowerLength*.83,fetlockZ,0,-lowerLength,footZ-kneeZ,thick*.77);
+  }else lower.branch(color,0,0,0,0,-lowerLength,footZ-kneeZ,thick*.72);
+  const foot=part(lower.group);foot.group.position.set(0,-lowerLength,footZ-kneeZ);
+  if(birdFoot){
+    for(const toe of [-1,0,1])foot.branch(footColor,0,-.015,0,toe*footLength*.58,-.025,footLength*(.92-Math.abs(toe)*.09),thick*.24);
+    foot.branch(footColor,0,-.012,0,0,-.018,-footLength*.62,thick*.22);
+  }else if(cloven){
+    for(const side of [-1,1])foot.add('round',footColor,side*thick*.34,-.022,footLength*.34,thick*.43,.05,footLength,0,side*.075,0);
+    for(const side of [-1,1])foot.add('round',footColor,side*thick*.41,.006,-footLength*.06,thick*.22,.035,footLength*.28,-.25);
+  }else if(paw){
+    foot.add('round',footColor,0,-.018,footLength*.18,thick*.92,.05,footLength*.72);
+    for(const toe of [-1,0,1])foot.add('round',footColor,toe*thick*.40,-.025,footLength*.72,thick*.31,.04,footLength*.48,0,toe*.09,0);
+  }else foot.add('round',footColor,0,-.022,footLength*.34,thick*.82,.05,footLength);
+  const side=x<0?'left':'right';
+  upper.group.name=`${label} ${side} upper leg`;lower.group.name=`${label} ${side} lower leg`;foot.group.name=`${label} ${side} foot`;
+  foot.group.userData.cloven=cloven;foot.group.userData.toes=birdFoot?4:cloven?2:paw?3:1;
+  const leg={upper:upper.group,lower:lower.group,foot:foot.group,x,z:z+footZ,restY:y,side:x<0?'left':'right',
     contactOffset:new T.Vector3(0,-.022,footLength*.34)};
   foot.finish();lower.finish();upper.finish();return leg;
 }
@@ -66,7 +93,7 @@ function bird(root,s){
     for(let i=0;i<3;i++)wing.add('round',i%2?accent:'#756959',side*.09,-.05+i*.043,-.18,.040,.055,.39,-.15);
     wings.push(wing.finish());
     legs.push(articulatedLeg(root,{color:'#8b7050',footColor:'#937c5b',x:side*.098,y:y-.16,z:0,
-      length:y-.18,thick:.043,footLength:.145,footZ:.052}));
+      length:y-.18,thick:.043,footLength:.145,footZ:.052,birdFoot:true,label:`${form} leg`}));
   }
   b.finish();return {head:neck.finish(),legs,wings};
 }
@@ -129,12 +156,15 @@ function mammal(root,s){
   for(let i=0;i<4;i++){
     const side=i%2?1:-1,front=i<2,thick=deer?.073:low?.076:.10;
     legs.push(articulatedLeg(root,{color:coat,footColor:deer?'#403b32':accent,x:side*width*.31,y:leg+.05,
-      z:front?.224:-.256,length:leg+.025,thick,footLength:rabbit?.195:.095,footZ:rabbit?.075:.04}));
+      z:front?.224:-.256,length:leg+.025,thick,footLength:deer?.093:rabbit?.195:.095,
+      kneeZ:deer?(front?.016:-.092):0,footZ:rabbit?.075:deer?(front?.026:-.018):.04,
+      cloven:deer,paw:!deer,label:deer?`deer ${front?'front':'hind'}`:`${form} ${front?'front':'hind'}`}));
   }
   b.finish();return {head:head.finish(),legs,tail:tail.finish()};
 }
 export function forestAnimal(s){
   const root=new T.Group(),isBird=['pigeon','partridge','grouse','pheasant'].includes(s.form);
+  root.name=`forest ${s.form}`;
   const rig=isBird?bird(root,s):mammal(root,s);
   root.scale.setScalar(s.length);return {root,...rig};
 }

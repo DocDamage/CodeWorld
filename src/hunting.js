@@ -2,6 +2,7 @@ import * as T from 'three';
 import {forestAnimal,forestRifle} from './forest-models.js';
 import {forestSites,forestSpecies,inHuntingWoods,closestForestSite} from './forest-species.js';
 import {BIRD_GAIT,BOUND_GAIT,HEAVY_GAIT,WALK_GAIT,createGaitState,trackYaw,updateGait} from './animal-gait.js';
+import {geometryFootprintRadius,moveWithClearance,nearestOpenPoint} from './animal-collision.js';
 
 const el=id=>document.getElementById(id);
 const show=(node,value)=>{if(node.textContent!==value)node.textContent=value;};
@@ -11,21 +12,24 @@ export function buildHunting(scene,camera,ground,clear,trees,resize,plantTrack){
   const root=new T.Group(),rifle=forestRifle();scene.add(root,rifle);rifle.visible=false;
   const animals=forestSpecies.map((spec,i)=>{
     const site=forestSites[spec.site],rig=forestAnimal(spec),home=new T.Vector2(site.x+spec.dx,site.z+spec.dz);
-    for(let k=0;!clear(home.x,home.y)&&k<24;k++){
-      home.set(site.x+spec.dx+Math.cos(k*2.4)*(.4+k*.16),site.z+spec.dz+Math.sin(k*2.4)*(.4+k*.16));
-    }
     const bird=Boolean(rig.wings),rabbit=spec.form==='hare'||spec.form==='rabbit';
     const heavy=['stag','roe','fallow','ram','boar','badger'].includes(spec.form);
     const gaitProfile=bird?BIRD_GAIT:rabbit?BOUND_GAIT:heavy?HEAVY_GAIT:WALK_GAIT;
     const hoof=['stag','roe','fallow','ram','boar'].includes(spec.form),kind=bird?'bird':hoof?'hoof':'paw';
     const width=kind==='bird'?clamp(spec.length*.07,.025,.055):kind==='hoof'?clamp(spec.length*.055,.035,.095):clamp(spec.length*.075,.025,.085);
     const length=kind==='bird'?clamp(spec.length*.11,.04,.085):kind==='hoof'?clamp(spec.length*.085,.055,.14):clamp(spec.length*.105,.035,.12);
+    const collisionRadius=geometryFootprintRadius(rig.root);
+    const standingHeight=new T.Box3().setFromObject(rig.root).max.y;
+    const habitatClear=(x,z)=>inHuntingWoods(x,z)&&clear(x,z,standingHeight);
+    const open=nearestOpenPoint(habitatClear,home.x,home.y,collisionRadius,{minX:42,maxX:126,minZ:-47,maxZ:42},8);
+    if(open)home.set(open.x,open.z);
     const a={spec,rig,home,state:'live',angle:i*2.4,alarm:0,phase:i*1.83,returnIn:0,fall:0,bird,rabbit,
-      gaitProfile,gait:createGaitState(rig.legs.length,i*.91),moveX:0,moveZ:1,contact:new T.Vector3(),kind,width,length};
+      gaitProfile,gait:createGaitState(rig.legs.length,i*.91),moveX:0,moveZ:1,contact:new T.Vector3(),kind,width,length,
+      collisionRadius,habitatClear};
     if(plantTrack){
       a.touchdowns=new Uint8Array(rig.legs.length);a.touchdown=index=>{a.touchdowns[index]=1;};
     }
-    rig.root.position.set(home.x,ground(home.x,home.y),home.y);rig.root.rotation.y=a.angle;
+    rig.root.position.set(home.x,ground(home.x,home.y),home.y);rig.root.rotation.order='YXZ';rig.root.rotation.y=a.angle;
     rig.root.userData.animal=a;root.add(rig.root);return a;
   });
   const ray=new T.Raycaster(),hits=[],cover=[],dir=new T.Vector3(),offset=new T.Vector3(),last=new T.Vector2();
@@ -151,9 +155,9 @@ export function buildHunting(scene,camera,ground,clear,trees,resize,plantTrack){
       const step=dt*(flee?2.1+spec.length:.21+spec.length*.14);
       let moved=false;
       for(const turn of turnOptions){
-        const angle=a.angle+turn,x=p.x+step*Math.sin(angle),z=p.z+step*Math.cos(angle);
-        if(!inHuntingWoods(x,z)||!clear(x,z)||Math.abs(ground(x,z)-ground(p.x,p.z))>.45)continue;
-        p.x=x;p.z=z;a.angle=angle;moved=true;break;
+        const angle=a.angle+turn,next=moveWithClearance(a.habitatClear,p.x,p.z,step*Math.sin(angle),step*Math.cos(angle),a.collisionRadius);
+        if(next.x===p.x&&next.z===p.z||Math.abs(ground(next.x,next.z)-ground(p.x,p.z))>.45)continue;
+        p.x=next.x;p.z=next.z;a.angle=angle;moved=true;break;
       }
       if(!moved)a.angle+=dt;
     }
@@ -166,6 +170,12 @@ export function buildHunting(scene,camera,ground,clear,trees,resize,plantTrack){
     p.y=ground(p.x,p.z)+hop+Math.max(0,air)+bob;rig.root.rotation.y=a.angle;
     rig.root.rotation.x=gaiting&&!airborne?.022*Math.sin(a.gait.phase):0;
     rig.root.rotation.z=gaiting&&!airborne?.028*Math.sin(a.gait.phase+Math.PI/2):.008*Math.sin(clock*.7+a.phase);
+    if(!a.bird&&!airborne){
+      const dx=Math.sin(a.angle)*spec.length*.31,dz=Math.cos(a.angle)*spec.length*.31;
+      const pitch=Math.atan2(ground(p.x+dx,p.z+dz)-ground(p.x-dx,p.z-dz),spec.length*.62);
+      const roll=Math.atan2(ground(p.x+dz,p.z-dx)-ground(p.x-dz,p.z+dx),spec.length*.62);
+      rig.root.rotation.x-=clamp(pitch,-.42,.42);rig.root.rotation.z+=clamp(roll,-.39,.39);
+    }
     rig.head.rotation.x=walking?-.08+.055*Math.sin(a.gait.phase):.20+.27*Math.sin(clock*1.29+a.phase);
     rig.head.rotation.y=.19*Math.cos(clock*.78+a.phase);
     for(let i=0;i<rig.legs.length;i++){
@@ -173,6 +183,12 @@ export function buildHunting(scene,camera,ground,clear,trees,resize,plantTrack){
       if(a.bird&&airborne){leg.upper.rotation.x=-.78;leg.lower.rotation.x=1.05;leg.foot.rotation.x=-.25;continue;}
       leg.upper.rotation.x=a.gait.swing[i];leg.lower.rotation.x=-a.gait.swing[i]*.22+a.gait.flex[i];
       leg.foot.rotation.x=-leg.upper.rotation.x-leg.lower.rotation.x*.72;
+      if(!airborne&&!a.bird){
+        leg.upper.position.y=leg.restY;
+        leg.foot.localToWorld(a.contact.copy(leg.contactOffset));
+        const sole=ground(a.contact.x,a.contact.z)+(.022+a.gait.lift[i])*spec.length;
+        leg.upper.position.y+=clamp((sole-a.contact.y)/spec.length,-.10,.10);
+      }
     }
     if(a.touchdowns)for(let i=0;i<a.touchdowns.length;i++)if(a.touchdowns[i]){
       a.touchdowns[i]=0;

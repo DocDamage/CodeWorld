@@ -5,7 +5,7 @@ import {forestSites} from './forest-species.js';
 import {buildMine} from './mine.js';
 import {buildForgePanel,describeCargo} from './forge-panel.js';
 import {minePoint} from './mine-layout.js';
-import {atLake,onLakeDock,dock,lake} from './lake-layout.js';
+import {atLake,onLakeDock,dock,lake,falls} from './lake-layout.js';
 import {waterReflections} from './water.js';
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -34,7 +34,7 @@ import {brookStage} from './brook.js';
 import {buildRainwater} from './rainwater.js';
 import { createFootfallTracker } from './footfall.js';
 import { buildFootprints } from './footprints.js';
-import { onBridge,nearPath,riverWidth,riverX } from './layout.js';
+import { onBridge,nearPath,riverWidth,riverX,springZ } from './layout.js';
 import { animateFires } from './fire.js';
 import { stepSmoke } from './smoke.js';
 import { createGamepadControls } from './gamepad.js';
@@ -81,7 +81,9 @@ function start(){
   try{savedFarm=JSON.parse(localStorage.getItem(farmSaveKey));}catch{}
   const woodlandRoot=new T.Group();scene.add(woodlandRoot);
   const woodland=buildWoodland(woodlandRoot,leaves),castle=buildCastle(scene,air.waterMaterial),catacomb=buildCatacomb(scene),farmScene=buildFarm(scene,leaves,savedFarm,()=>mine.state.forge.tools.bronzeSickle,animalTrack);
-  const hunting=buildHunting(scene,camera,height,woodland.clear,woodlandRoot,()=>resize(),animalTrack);
+  const wildlifeClear=(x,z,animalHeight)=>walkable(x,z)&&woodland.clear(x,z,animalHeight)&&
+    (x>53||villageTreesClear(x,z)&&village.walkable(x,z));
+  const hunting=buildHunting(scene,camera,height,wildlifeClear,woodlandRoot,()=>resize(),animalTrack);
   const mineKey='briarwick-ore-mine-v1';
   let savedMine=null;
   try{savedMine=JSON.parse(localStorage.getItem(mineKey));}catch{}
@@ -145,9 +147,11 @@ function start(){
     air.uniforms.night.value=night;air.uniforms.dusk.value=dusk;
     hemi.color.copy(daysky).lerp(nightsky,night);hemi.groundColor.copy(dayground).lerp(nightground,night);hemi.intensity=1.55-night*1.29;
     sun.color.copy(sunDay).lerp(sunDusk,dusk).lerp(sunNight,night);sun.intensity=2.03-night*1.77;
+    const arc=(hour-6)*Math.PI/12,east=Math.cos(arc),alt=Math.sin(arc);
+    const solar=air.uniforms.solarDirection.value.set(.84*east-.39*alt,.84*alt,.54*east+.54*alt).normalize();
     if(Math.abs(hour-shadowHour)>.18){
-      const arc=(hour-6)*Math.PI/12;
-      sun.position.set(sun.target.position.x-23+27*Math.cos(arc),sun.target.position.y+15+23*Math.max(0,Math.sin(arc)),sun.target.position.z+19+8*Math.cos(arc));
+      sun.position.copy(solar).multiplyScalar((solar.y<0?-1:1)*48);
+      sun.position.y=Math.max(4,sun.position.y);sun.position.add(sun.target.position);
       renderer.shadowMap.needsUpdate=true;shadowHour=hour;
     }
     scene.fog.color.copy(fogDay).lerp(fogDusk,dusk*.8).lerp(fogNight,night);scene.fog.density=.012+night*.011;
@@ -176,7 +180,7 @@ function start(){
   const footprints=buildFootprints(scene,(x,z,mark)=>{
     const boot=!mark.kind||mark.kind==='boot',floor=boot?exteriorY:height(x,z);
     if(onLakeDock(x,z)||atLake(x,z)&&height(x,z)<lake.level||onBridge(x,z,.11)||farmSheltered(x,z))return null;
-    if(!inFarm(x,z)&&z<54&&Math.abs(x-riverX(z))<riverWidth(z)+.18)return null;
+    if(!inFarm(x,z)&&z>=springZ&&z<54&&Math.abs(x-riverX(z))<riverWidth(z)+.18)return null;
     if(boot&&Math.abs(floor-height(x,z))>.45)return null;
     if(castle.nearby(x,z)){
       const place=castle.area(x,z,floor);
@@ -572,15 +576,15 @@ function start(){
     const button=document.createElement('button');button.type='button';button.textContent=name;
     button.onclick=()=>{closePlaces();go();};el('placeList').append(button);return button.onclick;
   }
-  entrances.set('#dragon-hoard',destination('Dragon hoard',()=>enterWalk(estate.x+6.5,estate.z-8.3,2.38,.19,estate.y-16)));
+  entrances.set('#dragon-hoard',destination('Dragon hoard',()=>enterWalk(estate.x+10.4,estate.z-9.4,2.23,.21,estate.y-16)));
   entrances.set('#briar-crypts',destination(catacomb.name,()=>enterWalk(catacomb.entry.x,catacomb.entry.z,catacomb.entry.yaw,-.14)));
   entrances.set('#ore-mine',destination(mine.name,()=>{
     const vein=mine.state.veins[0],point=minePoint(vein.progress),cart=mine.cart.pose;
     enterWalk(point.x,point.z,Math.atan2(point.x-cart.x,point.z-cart.z),-.17,point.y);checkDoor(false);
   }));
   entrances.set('#armory-rail-yard',destination('Blacksmith rail yard',()=>{
-    const p=mine.yard,x=p.x+2.3,z=p.z+2.6;
-    enterWalk(x,z,Math.atan2(x-mine.portal.x,z-mine.portal.z),-.14,walkHeight(x,z));checkDoor(false);
+    const p=mine.yard,x=p.x+5.1,z=p.z+4.2;
+    enterWalk(x,z,Math.atan2(x-mine.portal.x,z-mine.portal.z),.08,walkHeight(x,z));checkDoor(false);
   }));
   entrances.set('#blacksmith-forge',destination('Blacksmith forge',()=>{
     modeUI('walk');enterInterior(plots.find(p=>p.id==='mill'));
@@ -591,6 +595,10 @@ function start(){
     enterWalk(dock.x,dock.near+3.8,Math.PI-.15,-.075);checkDoor(false);
   });
   entrances.set('#alder-lake',lakeEntrance);
+  entrances.set('#alder-falls',destination('Alder Falls',()=>{
+    modeUI('orbit');orbit.maxDistance=90;
+    fly(v(falls.x+14,26,falls.z-43),v(falls.x+2,12,falls.z+6),1.4);
+  }));
   for(const [i,site] of forestSites.entries()){
     const visit=destination(i===0?'Pinewood hunting trail':site.name,()=>{
       const p=hunting.arrival(i);
@@ -624,6 +632,7 @@ function start(){
   });
   entrances.set('#mill-wheel',wheelEntrance);
   entrances.set('#brook',destination('Brook riffles',()=>enterWalk(riverX(29.8)+2.65,29.8,.49,-.29)));
+  entrances.set('#brook-spring',destination('Brook spring',()=>enterWalk(riverX(springZ)+3.7,springZ+4.8,.66,-.22)));
   destination('Restart tour',restartTour);
   el('places').onclick=()=>{const open=el('placeList').hidden;el('placeList').hidden=!open;el('places').setAttribute('aria-expanded',open);};
   document.addEventListener('pointerdown',e=>{if(!e.target.closest('.dock'))closePlaces();});
@@ -795,7 +804,6 @@ function start(){
     }
     const outdoorStep=(xx,zz)=>{
       const ground=walkHeight(xx,zz);
-      if(atLake(xx,zz))return walkable(xx,zz)&&lakeScene.clear(xx,zz)?ground:null;
       const insideCatacomb=catacomb.at(camera.position.x,camera.position.z,exteriorY,.7);
       const inMine=mine.nearby(camera.position.x,camera.position.z)&&mine.at(camera.position.x,camera.position.z,exteriorY,.45);
       if(mine.nearby(xx,zz)){
@@ -807,6 +815,7 @@ function start(){
         if(insideCatacomb||floor!==null&&Math.abs(floor-exteriorY)<.32)return floor;
       }
       if(inMine&&Math.abs(ground-exteriorY)>.5)return null;
+      if(atLake(xx,zz))return walkable(xx,zz)&&lakeScene.clear(xx,zz)?ground:null;
       if(castle.nearby(xx,zz))return castle.next(xx,zz,exteriorY,ground);
       return walkable(xx,zz)&&farmScene.clear(xx,zz)&&woodland.clear(xx,zz)&&villageTreesClear(xx,zz)&&village.walkable(xx,zz)?ground:null;
     };

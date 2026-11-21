@@ -1,7 +1,8 @@
 import * as T from 'three';
 import {Builder,registerSharedMaterial,v,TAU,tint} from './model.js';
-import {animalPlan,farmHeight} from './farm-layout.js';
+import {animalPlan,farmClear,farmHeight} from './farm-layout.js';
 import {BIRD_GAIT,HEAVY_GAIT,createGaitState} from './animal-gait.js';
+import {geometryFootprintRadius,nearestOpenPoint} from './animal-collision.js';
 
 const coats={
   piebald:{base:[224,217,194],dark:[65,59,49],spots:[[.10,.36,.16,.26],[.46,.24,.18,.22],[.70,.72,.22,.27],[.88,.35,.13,.29]]},
@@ -55,16 +56,32 @@ function limb(color,sx,sy,sz,x,y,z,wing=false){
   mesh.scale.set(sx,sy,sz);mesh.position.y=-sy*.48;mesh.castShadow=true;mesh.receiveShadow=true;pivot.position.set(x,y,z);pivot.add(mesh);return pivot;
 }
 
-function articulatedLeg(color,sx,sy,sz,x,y,z,hoofColor=color){
+function toe(root,color,from,to,radius){
+  const delta=to.clone().sub(from),mesh=new T.Mesh(new T.CylinderGeometry(radius,radius*.72,delta.length(),7),material(color));
+  mesh.position.copy(from).add(to).multiplyScalar(.5);mesh.quaternion.setFromUnitVectors(v(0,1,0),delta.clone().normalize());
+  mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return mesh;
+}
+
+function articulatedLeg(color,sx,sy,sz,x,y,z,hoofColor=color,footType='cloven'){
   const upper=new T.Group(),upperMesh=new T.Mesh(legGeometry,material(color));
   upper.position.set(x,y,z);upperMesh.scale.set(sx,sy*.55,sz);upperMesh.position.y=-sy*.265;
   upperMesh.castShadow=upperMesh.receiveShadow=true;upper.add(upperMesh);
   const lower=new T.Group(),lowerMesh=new T.Mesh(legGeometry,material(color));lower.position.y=-sy*.51;
   lowerMesh.scale.set(sx*.78,sy*.50,sz*.82);lowerMesh.position.y=-sy*.245;lowerMesh.castShadow=lowerMesh.receiveShadow=true;
   lower.add(lowerMesh);upper.add(lower);
-  const foot=new T.Group(),hoof=new T.Mesh(wingGeometry,material(hoofColor));foot.position.y=-sy*.48;
-  hoof.scale.set(sx*.72,Math.max(.035,sy*.065),sz*1.18);hoof.position.set(sy*.055,-.018,0);hoof.castShadow=hoof.receiveShadow=true;
-  foot.add(hoof);lower.add(foot);
+  const foot=new T.Group();foot.position.y=-sy*.48;
+  if(footType==='bird'){
+    const origin=v(0,-.018,0),toeLength=sy*.30;
+    for(const spread of [-1,0,1])toe(foot,hoofColor,origin,v(toeLength,-.025,spread*sz*.92),sx*.16);
+    toe(foot,hoofColor,origin,v(-toeLength*.58,-.021,0),sx*.14);foot.userData.toes=4;
+  }else{
+    for(const side of [-1,1]){
+      const hoof=new T.Mesh(wingGeometry,material(hoofColor));hoof.scale.set(sx*.82,Math.max(.035,sy*.07),sz*.50);
+      hoof.position.set(sy*.065,-.018,side*sz*.32);hoof.rotation.y=-side*.08;hoof.castShadow=hoof.receiveShadow=true;foot.add(hoof);
+    }
+    foot.userData.cloven=true;foot.userData.toes=2;
+  }
+  lower.add(foot);
   return {upper,lower,foot,x:x+sy*.055,z,side:z<0?'left':'right',contactOffset:new T.Vector3(sy*.055,-.018,0)};
 }
 
@@ -85,6 +102,8 @@ function cow(root,b,motion,index){
   b.put('ball',hide,-.74,1.18,0,.77,1.05,.91,0,0,-.11,coat);
   b.put('ball',hide,.65,1.26,0,.79,1.12,.79,0,0,-.25,coat);
   b.put('ball',hide,.89,1.42,0,.69,.85,.56,0,0,.39,coat);
+  b.put('ball',hide,.70,1.18,0,.72,1.05,.79,0,0,-.17,coat);
+  b.put('leaf','#d8c8b5',.79,.92,0,.34,.63,.42,0,0,-.18,coat);
   b.put('ball','#ae8d7e',-.33,.68,0,.48,.32,.44,0,0,.13);
   for(const x of [-.47,-.23])for(const z of [-.145,.145])b.put('cyl','#947367',x,.501,z,.037,.137,.044,.06,z,.11);
   for(const x of [-.72,.61])for(const z of [-.33,.33]){
@@ -112,6 +131,7 @@ function pig(root,b,motion,index){
   const hide=index%2?'#f0d5c7':'#d2a695';
   b.put('ball',hide,-.11,.682,0,1.43,.891,.846,0,0,.02,'pigskin');
   b.put('ball',hide,.43,.716,0,.73,.76,.666,0,0,-.23,'pigskin');
+  b.put('ball',hide,.61,.624,0,.52,.62,.62,0,0,-.20,'pigskin');
   for(const x of [-.48,.47])for(const z of [-.26,.26]){
     const leg=articulatedLeg('#826a59',.135,.47,.142,x,.48,z,'#5a4b42');root.add(leg.upper);motion.limbs.push(leg);
   }
@@ -145,7 +165,8 @@ function hen(root,b,motion,index){
       const c=tint(plumage,.17);b.put('leaf',c,-.22+i*.087,.438+row*.078,s*(.223+row*.013),.218,.081,.059,0,s*.13,.09+row*.08,'plumage');
     }
     const wing=limb(shade,.35,.23,.092,-.04,.61,s*.211,true);wing.rotation.z=-.19;root.add(wing);(motion.wings??=[]).push(wing);
-    const leg=articulatedLeg('#937745',.043,.30,.058,.065,.32,s*.113,'#6f5a35');root.add(leg.upper);motion.limbs.push(leg);
+    b.put('ball',plumage,.01,.385,s*.19,.22,.25,.20,0,0,-.16,'plumage');
+    const leg=articulatedLeg('#937745',.043,.30,.058,.065,.32,s*.113,'#6f5a35','bird');root.add(leg.upper);motion.limbs.push(leg);
   }
   const h=headOf(root,motion,.287,.694,0);
   h.put('ball',plumage,.093,.038,0,.304,.303,.232,0,0,-.11,'plumage');
@@ -159,29 +180,35 @@ function hen(root,b,motion,index){
   h.finish();
 }
 
-function animal(root,kind,x,z,index,area){
+function animal(root,kind,x,z,index,area,allowSolid=false,clear=farmClear){
   const group=new T.Group();group.position.set(x,farmHeight(x,z),z);root.add(group);
   group.userData.farmAnimal=kind;
   const legCount=kind==='chicken'?2:4;
   const motion={baseX:x,baseZ:z,phase:index*1.731+(kind==='cow'?0:kind==='pig'?7:13),area,limbs:[],
     gait:createGaitState(legCount,index*.73),gaitProfile:kind==='chicken'?BIRD_GAIT:HEAVY_GAIT,
-    strideScale:kind==='cow'?1.25:kind==='pig'?.8:.4,moveX:1,moveZ:0,contact:new T.Vector3()};
+    strideScale:kind==='cow'?1.25:kind==='pig'?.8:.4,collisionRadius:0,moveX:1,moveZ:0,contact:new T.Vector3()};
   group.userData.motion=motion;
   const b=new Builder(group);
-  ({cow,pig,chicken:hen})[kind](group,b,motion,index);b.finish();return group;
+  ({cow,pig,chicken:hen})[kind](group,b,motion,index);b.finish();
+  motion.collisionRadius=geometryFootprintRadius(group);
+  if(!allowSolid){
+    const open=nearestOpenPoint(clear,x,z,motion.collisionRadius,area,9);
+    if(open){x=open.x;z=open.z;group.position.set(x,farmHeight(x,z),z);motion.baseX=x;motion.baseZ=z;}
+  }
+  return group;
 }
 
-export function livestock(root){
+export function livestock(root,clear=farmClear){
   const animals=[];
   for(const plan of animalPlan)for(let i=0;i<plan.count;i++){
     const cols=Math.ceil(Math.sqrt(plan.count)),row=i/cols|0,col=i%cols;
     const x=plan.minX+2+col*(plan.maxX-plan.minX-4)/Math.max(1,cols-1);
     const z=plan.minZ+2+row*(plan.maxZ-plan.minZ-4)/Math.max(1,Math.ceil(plan.count/cols)-1);
-    animals.push(animal(root,plan.kind,x,z,i,plan));
+    animals.push(animal(root,plan.kind,x,z,i,plan,false,clear));
   }
   const milkingArea={minX:-89.1,maxX:-82.9,minZ:26.2,maxZ:32.2};
   for(const [index,x,z] of [[18,-88.72,27.7],[19,-83.27,30.5]]){
-    const cow=animal(root,'cow',x,z,index,milkingArea);cow.rotation.y=index===18?0:Math.PI;
+    const cow=animal(root,'cow',x,z,index,milkingArea,true);cow.rotation.y=index===18?0:Math.PI;
     cow.userData.motion.inStall=true;animals.push(cow);
   }
   return animals;

@@ -2,7 +2,8 @@ import {brookBed} from './brook.js';
 import {lakeHeight} from './lake-layout.js';
 import {estateHeight} from './estate.js';
 import {farm,farmHeight,inFarm} from './farm-layout.js';
-import {plotDistance,plots,riverWidth,riverX} from './layout.js';
+import {plotDistance,plots,riverWidth,riverX,springZ} from './layout.js';
+import {mineYardGround} from './mine-layout.js';
 
 export const mix=(a,b,t)=>a+(b-a)*t;
 export function smooth(a,b,x) {const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);}
@@ -18,7 +19,14 @@ export function height(x,z) {
     h=mix(p.y,h,smooth(.25,3.3,edge));
   }
   const bank=Math.abs(x-riverX(z))-riverWidth(z);
-  h=mix(brookBed(x,z),h,smooth(-.36,1.62,bank));
+  if(z<springZ+12){
+    const dx=x-riverX(z),dz=z-springZ;
+    h+=2.8*Math.exp(-((dx/5.5)**2+((dz+1.3)/3.9)**2));
+    const rim=1.4*Math.max(0,1-Math.abs(dz-5)/8);
+    h+=rim*Math.exp(-(((Math.abs(dx)-riverWidth(z)-.9)/2.3)**2));
+  }
+  h=mix(h,brookBed(x,z),(1-smooth(-.36,1.62,bank))*smooth(springZ-1.4,springZ,z));
+  h=mineYardGround(x,z,h);
   const border=Math.hypot(Math.max(farm.bounds.minX-x,0,x-farm.bounds.maxX),Math.max(farm.bounds.minZ-z,0,z-farm.bounds.maxZ));
   if(border<3)h=mix(farmHeight(x,z),h,smooth(0,3,border));
   const ground=x>42?mix(h,estateHeight(x,z),smooth(42,54.25,x)):h;

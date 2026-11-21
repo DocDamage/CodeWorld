@@ -1,7 +1,13 @@
 import { CatmullRomCurve3, Vector3 } from 'three';
 
 export const riverX = z => -9 - 3 * Math.sin(z * .092) - z * .13;
-export const riverWidth = z => 2.05 + .35 * Math.cos(z * .21);
+export const springZ=-42.4;
+export const riverWidth = z => {
+  const full=2.05+.35*Math.cos(z*.21);
+  if(z>springZ+12)return full;
+  const t=Math.max(0,(z-springZ)/12);
+  return .48+(full-.48)*t*t*(3-2*t)+1.05*Math.exp(-(((z-springZ-2.3)/1.8)**2));
+};
 export const brookLevel = -.17;
 export const bridgeZ = 3.9;
 export const bridgeSpan = 9.2;

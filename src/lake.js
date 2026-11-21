@@ -129,7 +129,6 @@ export function buildLake(scene,camera,material,updateFov,pulse){
     if(!shown&&active)leave();
     active=shown;panel.hidden=!shown;
     if(!root.visible)return;
-    scenery.tick(t);
     // Keep the moored boat responding to wind even while the player stands ashore.
     if(!boat.aboard)vessel.step(dt,0,0,lakeWind(t,gust));
     drawBoat(boat,t);

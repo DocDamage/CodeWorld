@@ -7,10 +7,10 @@ import { moatDistance,trailDistance } from './estate.js';
 import { v,TAU,range,random,tint,pick,meshSurface,label } from './model.js';
 import { swayMaterial } from './foliage.js';
 import { farmClear,fieldAt,inFarm } from './farm-layout.js';
-import { mineTerrainCut } from './mine-layout.js';
+import { inMineYard,mineTerrainCut } from './mine-layout.js';
 import { catacombTerrainCut } from './catacomb-layout.js';
 
-import { bridgeSpan, bridgeZ, onBridge, pavingAllowed, plots, roads, nearPath, inPlot, riverX, riverWidth } from './layout.js';
+import { bridgeSpan, bridgeZ, onBridge, pavingAllowed, plots, roads, nearPath, inPlot, riverX, riverWidth, springZ } from './layout.js';
 export { plots, nearPath, inPlot, riverX, riverWidth, brookLevel, doorstep, doorOffset } from './layout.js';
 
 export {height,mix,smooth} from './world-height.js';
@@ -42,6 +42,7 @@ export function terrain(root,b) {
       footing=Math.min(footing,smooth(0,1.45,d));
     }
     c.lerp(new T.Color('#7e805b'),(1-footing)*.75);
+    if(inMineYard(x,z))c.lerp(new T.Color('#918371'),.82);
     if(pavingAllowed(x,z)&&nearPath(x,z,.15))c.lerp(new T.Color('#777269'),.63);
     cols.push(c.r,c.g,c.b);
     if(i&&j){
@@ -80,13 +81,20 @@ export function terrain(root,b) {
       }
     }
   });
+  // Water wells out between tilted beds of shale at the foot of the wooded slope.
+  const eye=riverX(springZ),level=brookStage(springZ);
+  for(const side of [-1,1])for(let i=0;i<6;i++){
+    const x=eye+side*(.68+i*.44),z=springZ-.35-i*.22;
+    b.put('stone',tint(i%2?'#5d6357':'#707263'),x,level+.19+i*.19,z,1.42+i*.19,.92+i*.14,1.65,-.14,.23*i,side*.16,'stone');
+  }
+  b.put('stone','#62695b',eye,level+.57,springZ-.54,2.48,.62,1.75,-.18,.09,-.06,'stone');
   for(const [z,offset,size] of cobbles){
     const x=riverX(z)+offset;
     b.put('stone',tint('#787668',.12),x,brookStage(z)-size*.13,z,size*1.16,size*.75,size*.98,.14,z*.19,.07,'stone');
   }
   // Sorting by the current leaves gravel bars on shoals and along the inside bank.
   for(let i=0;i<1800;i++){
-    const z=range(-50,50),offset=range(-1,1),x=riverX(z)+offset*riverWidth(z);
+    const z=range(springZ,50),offset=range(-1,1),x=riverX(z)+offset*riverWidth(z);
     if(Math.abs(offset)<.69&&riffle(z)<.48)continue;
     const s=range(.045,.23);
     b.put('stone',tint(pick(['#a29981','#6c7368','#817463','#988c78']),.12),x,height(x,z)+.024,z,s*1.25,s*.46,s,0,range(0,TAU),.09,'stone');
@@ -107,7 +115,7 @@ const grassZones=Object.freeze([
 ]);
 
 export function grassAllowed(x,z,zone){
-  if(zone==='village')return !mineTerrainCut(x,z,.42)&&!inPlot(x,z,.48)&&!nearPath(x,z,.52)&&
+  if(zone==='village')return !inMineYard(x,z,.3)&&!mineTerrainCut(x,z,.42)&&!inPlot(x,z,.48)&&!nearPath(x,z,.52)&&
     !nearFarmLane(x,z,1.42)&&Math.abs(x-riverX(z))>=riverWidth(z)+.46&&!atLake(x,z);
   if(zone==='farm')return inFarm(x,z)&&!fieldAt(x,z,.42)&&farmClear(x,z)&&
     Math.abs(z-24)>=2.35&&!(z>22&&Math.abs(x+86)<1.78)&&Math.hypot(x+55.5,z-39.5)>=2.75;
@@ -186,7 +194,7 @@ export function walkable(x,z) {
   if(atLake(x,z)||z>48&&z<62&&Math.abs(x-dock.x)<10)return lakeWalkable(x,z);
   if(inFarm(x,z))return true;
   if(inPlot(x,z,.24)||x< -46||x>213||z>49||z<(x<54.25?-43:-102))return false;
-  return Math.abs(x-riverX(z))>riverWidth(z)+.32 || onBridge(x,z);
+  return z<springZ-1 || Math.abs(x-riverX(z))>riverWidth(z)+.32 || onBridge(x,z);
 }
 
 const farmLane=new T.CatmullRomCurve3([[-24,7.58],[-22.8,12.65],[-24.3,17.8],[-30.5,21],[-36.8,23.9],[-44.15,24]].map(([x,z])=>v(x,0,z)));

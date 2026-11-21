@@ -1,5 +1,6 @@
 import { lakeRadius } from './lake-layout.js';
 import { waterSurface } from './water.js';
+import {buildSky} from './sky.js';
 import {brookStage,wakeAt,riffle} from './brook.js';
 import * as T from 'three';
 import { trailDistance } from './estate.js';
@@ -8,6 +9,8 @@ import { height,inPlot,nearPath,nearFarmLane,riverX,riverWidth,smooth } from './
 import { millWheel } from './hydraulics.js';
 import { swayMaterial } from './foliage.js';
 import { farm,inFarm } from './farm-layout.js';
+import {springZ} from './layout.js';
+import {inMineYard} from './mine-layout.js';
 
 function leafTexture() {
   const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
@@ -24,7 +27,8 @@ function leafTexture() {
 export function plantValley(root,b,leaves) {
   const foliage=[],treePositions=[];
   function tree(x,z,s,rich=true){
-    if(inFarm(x,z)||nearFarmLane(x,z,2.4)||inPlot(x,z,2.6)||nearPath(x,z,1.45)||(x>14&&trailDistance(x,z)<3.2))return;
+    if(inFarm(x,z)||nearFarmLane(x,z,2.4)||inPlot(x,z,2.6)||nearPath(x,z,1.45)||(x>14&&trailDistance(x,z)<3.2)||
+      inMineYard(x,z,2))return;
     const y=height(x,z)-.08,base=v(x,y,z);
     const fork=v(x+range(-.23,.23)*s,y+2.2*s,z+range(-.23,.23)*s);
     b.beam(tint('#554d40'),base,fork,.46*s,.40*s,'cyl','plantWood');
@@ -56,7 +60,7 @@ export function plantValley(root,b,leaves) {
   foliage.forEach(({m,c},i)=>{canopy.setMatrixAt(i,m);canopy.setColorAt(i,c);});canopy.receiveShadow=true;root.add(canopy);
   for(let i=0;i<3100;i++){
     const x=range(-35,33),z=range(-33,33);
-    if(inPlot(x,z,.5)||nearPath(x,z,1)||nearFarmLane(x,z,1.15)||Math.abs(x-riverX(z))<riverWidth(z)+.32)continue;
+    if(inMineYard(x,z,.5)||inPlot(x,z,.5)||nearPath(x,z,1)||nearFarmLane(x,z,1.15)||Math.abs(x-riverX(z))<riverWidth(z)+.32)continue;
     const y=height(x,z),s=range(.20,.89),c=pick(['#5d7047','#788052','#69784e','#566943']);
     if(i%4===0){b.put('crown',tint(c),x,y+s*.21,z,s*1.3,s*.79,s,range(-.22,.22),range(0,TAU),0,'plant');if(i%20===0)leaves?.add(x,y+s*.55,z,s*.45);}
     else if(i%3===0){b.put('leaf',tint('#a5a38c'),x,y,z,s*.84,s*.48,s,range(-.3,.3),range(0,6));}
@@ -93,7 +97,7 @@ export function plantValley(root,b,leaves) {
   // Sparse outcrops and deadfall make the common feel inhabited by weather rather than decoration.
   for(let i=0;i<150;i++){
     const x=range(-38,40),z=range(-35,38);
-    if(inFarm(x,z)||inPlot(x,z,1.2)||nearPath(x,z,1.35)||nearFarmLane(x,z,1.5)||Math.abs(x-riverX(z))<riverWidth(z)+1.1)continue;
+    if(inMineYard(x,z,.45)||inFarm(x,z)||inPlot(x,z,1.2)||nearPath(x,z,1.35)||nearFarmLane(x,z,1.5)||Math.abs(x-riverX(z))<riverWidth(z)+1.1)continue;
     const s=range(.12,.48),y=height(x,z);
     b.put('stone',tint(pick(['#6f7168','#858174','#77786d','#969080']),.11),x,y+s*.16,z,s*range(.8,1.45),s*.46,s,range(-.35,.35),range(0,TAU),0,'stone');
   }
@@ -137,38 +141,14 @@ function noiseTexture() {
 export function atmosphere(scene) {
   mountains(scene);
   const uniforms={clock:{value:0},night:{value:0},dusk:{value:0},noiseMap:{value:noiseTexture()},
-    dayTop:{value:new T.Color('#697985')},dayLow:{value:new T.Color('#b4b6a8')},
+    dayTop:{value:new T.Color('#538ac2')},dayLow:{value:new T.Color('#cad9df')},
     cloud:{value:.75},wind:{value:.5},rain:{value:0},flash:{value:0},wetness:{value:0},snowpack:{value:0},
     runoff:{value:1},raceFlow:{value:1},raceLevel:{value:0},waterFog:{value:new T.Color('#9fa5a0')},waterFogDensity:{value:.014},
     cloudOffset:{value:new T.Vector2()},streamTravel:{value:0},wheel:{value:new T.Vector2(millWheel.x,millWheel.z)}};
-  const sky=new T.Mesh(new T.SphereGeometry(190,32,20),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,uniforms,
-    vertexShader:`varying vec3 dir; void main(){dir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec3 dir;uniform sampler2D noiseMap;uniform float clock,night,dusk,cloud,wind,flash;uniform vec3 dayTop,dayLow,sunDirection,sunTint;
-      uniform vec2 cloudOffset;
-      float n(vec2 p){return texture2D(noiseMap,p/256.).r;}
-      float fb(vec2 p){return .46*n(p)+.27*n(p*2.03)+.15*n(p*4.07)+.08*n(p*8.1)+.04*n(p*16.3);}
-      void main(){vec3 d=normalize(dir);float h=max(0.,d.y);
-      vec3 low=mix(dayLow,vec3(.50,.24,.14),dusk*.7),top=mix(dayTop,vec3(.15,.21,.28),dusk);
-      vec3 col=mix(low,top,smoothstep(-.12,.32,h));col=mix(col,mix(vec3(.080,.115,.18),vec3(.009,.020,.054),smoothstep(0.,.55,h)),night);
-      float sunAngle=max(dot(d,sunDirection),0.);
-      col+=sunTint*(.14*pow(sunAngle,13.)+.31*pow(sunAngle,160.)+1.9*smoothstep(.99976,.99991,sunAngle))*(1.-night);
-      float moon=smoothstep(.99961,.99985,sunAngle);
-      col+=vec3(.53,.64,.77)*night*(moon*.77+pow(sunAngle,112.)*.12);
-      vec2 uv=d.xz/(h+.145)*5.4+vec2(0.,8.7)+cloudOffset;
-      float f=fb(uv),cover=smoothstep(.64-cloud*.27,.76-cloud*.27,f)*smoothstep(.0,.21,h);
-      vec3 cl=mix(vec3(.24,.27,.28),vec3(.50,.51,.48),smoothstep(.33,.68,f));
-      cl=mix(cl,vec3(.12,.145,.163),cloud*.63);cl=mix(cl,vec3(.47,.29,.20),dusk*(1.-cloud));cl=mix(cl,vec3(.035,.048,.067),night*.88);
-      cl+=sunTint*(1.-night)*pow(sunAngle,9.)*(1.-cover)*.38;
-      col=mix(col,cl,cover*.97);col=mix(col,vec3(.64,.77,.86),flash*(.27+cover*.31));
-      vec2 star=vec2(atan(d.z,d.x),asin(d.y))*330.;float s=step(.987,n(floor(star)+.5))*(1.-smoothstep(.03,.24,length(fract(star)-.5)));
-      col+=night*(1.-cover)*(1.-cloud)*s*.57;
-      gl_FragColor=vec4(col,1.);
-      #include <colorspace_fragment>
-      }`}));
-  sky.frustumCulled=false;sky.renderOrder=-10;scene.add(sky);
+  const sky=buildSky(uniforms);scene.add(sky);
   const pos=[],idx=[],bed=[],channel=[],segments=440,cross=24;
   for(let i=0;i<=segments;i++){
-    const z=-53+i*106/segments,x=riverX(z),w=riverWidth(z)+1.28;
+    const z=springZ-.55+i*(53-springZ+.55)/segments,x=riverX(z),w=riverWidth(z)+1.28;
     for(let j=0;j<=cross;j++){
       const bank=j/cross*2-1,lateral=bank*w,[wake,swerve]=wakeAt(lateral,z);
       pos.push(x+lateral,brookStage(z),z);

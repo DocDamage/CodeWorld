@@ -1,6 +1,6 @@
-import {brookLevel,riverWidth,riverX} from './layout.js';
+import {brookLevel,riverWidth,riverX,springZ} from './layout.js';
 
-export const brookStage=z=>brookLevel-.0062*(z-10.5);
+export const brookStage=z=>brookLevel-.0062*(z-10.5)+.82*Math.max(0,Math.min(1,(springZ+12-z)/12))**2;
 export const cobbles=[
   [-42,-.6,.8],[-32,1.1,.64],[-22,.52,1.06],[-21.3,-.35,.55],[-13,-.73,.67],
   [-4,.72,.82],[-3.4,1.35,.49],[.8,-.83,.64],[13.3,-.78,1.04],[13.9,.36,.78],

@@ -128,6 +128,8 @@ export function buildFarmEquipment(root){
     get pose(){return pose;},get wagon(){return wagon;},
     nearTractor(x,z){return Math.hypot(x-pose.x,z-pose.z)<2.20;},
     nearWagon(x,z){return Math.hypot(x-wagon.x,z-wagon.z)<2.38;},
+    blocks(x,z,radius=0){return overlaps(pose,x,z,1.12+radius,-1.72-radius,(plowing?2.81:1.83)+radius)||
+      overlaps(wagon,x,z,1.29+radius,-1.88-radius,1.88+radius);},
     clear(x,z){return farmClear(x,z)&&!tractorBlocks(x,z)&&!wagonBlocks(x,z);},
     mount(){mounted=true;pose={...pose,speed:0};},
     dismount(relocate=false){

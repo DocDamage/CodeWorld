@@ -2,19 +2,55 @@ import {soilMesh} from './soil.js';
 import * as T from 'three';
 import {Builder,meshSurface,range,tint,v,TAU,label} from './model.js';
 import {grassMap,height} from './land.js';
-import {lake,lakePoint,lakeRadius,lakeDepth,dock,falls} from './lake-layout.js';
+import {lake,lakePoint,lakeRadius,dock,falls,alderInfluence,alderX,alderWidth,lipZ} from './lake-layout.js';
+import {buildAlderFalls} from './waterfall.js';
 
 function groundPatch(root,x0,x1,z0,z1,mat){
-  const nx=Math.ceil((x1-x0)/.90),nz=Math.ceil((z1-z0)/.90),pos=[],uv=[],idx=[],cols=[];
+  const nx=Math.ceil((x1-x0)/.78),nz=Math.ceil((z1-z0)/.78),pos=[],uv=[],idx=[],cols=[],alpine=[];
   const sand=new T.Color('#9b9070'),weed=new T.Color('#5b7356'),color=new T.Color();
+  const slate=new T.Color('#68706c'),moss=new T.Color('#768150'),snow=new T.Color('#e1e8e5');
   for(let j=0;j<=nz;j++)for(let i=0;i<=nx;i++){
     const x=x0+(x1-x0)*i/nx,z=z0+(z1-z0)*j/nz,y=height(x,z),r=lakeRadius(x,z);
     color.copy(sand).lerp(weed,Math.min(1,Math.abs(r-1)*4)).multiplyScalar(.90+.07*Math.cos(x*.8+z*.26)+.06*Math.sin(z*.53-x*.37));
+    let rockFace=0,snowCover=0;
+    if(z>lipZ-8&&alderInfluence(x,z)>.01){
+      const slope=Math.hypot(height(x+.5,z)-height(x-.5,z),height(x,z+.5)-height(x,z-.5));
+      const up=z-lipZ,band=.5+.5*Math.sin(3.8*y+.18*x+.09*z);
+      color.lerp(moss,.45).lerp(slate,Math.min(1,.22+slope*.85)).multiplyScalar(.80+band*.24);
+      const drift=(up-47)*.15-slope*.60+.21*Math.sin(x*.91)+.34*Math.cos(x*.37-up*.52);
+      rockFace=Math.min(1,Math.max(0,(slope-.52)*1.45))*alderInfluence(x,z);
+      snowCover=Math.min(1,Math.max(0,drift))*alderInfluence(x,z);
+      color.lerp(snow,snowCover);
+    }
+    alpine.push(rockFace,snowCover);
     pos.push(x,y,z);cols.push(color.r,color.g,color.b);uv.push(x*.38,z*.38);
     if(i&&j){const k=j*(nx+1)+i;idx.push(k-nx-2,k-1,k,k-nx-2,k,k-nx-1);}
   }
   const m=meshSurface(root,pos,idx,cols,{map:mat,roughness:1,flatShading:false});
-  m.geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));return soilMesh(m,'shore');
+  m.geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+  m.geometry.setAttribute('alpineCover',new T.Float32BufferAttribute(alpine,2));
+  // Sample stone in the vertical plane of the face. A plan-view turf texture
+  // stretches into long green stripes where the escarpment drops away.
+  m.material.onBeforeCompile=shader=>{
+    shader.vertexShader='attribute vec2 alpineCover;varying vec2 cover;varying vec3 ledge;\n'+
+      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncover=alpineCover;ledge=position;');
+    shader.fragmentShader='varying vec2 cover;varying vec3 ledge;\n'+
+      shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+        if(cover.x+cover.y>.015){
+          float shear=ledge.y+.16*ledge.x+.48*sin(ledge.x*.47+ledge.z*.28);
+          vec2 face=vec2(ledge.x+ledge.z*.61,shear);
+          float grain=texture2D(map,face*vec2(.19,.54)).r;
+          float strata=texture2D(map,face*vec2(.035,.28)+grain*.064).g;
+          float fault=sin(ledge.x*1.73+sin(ledge.z*.68)+shear*.27);
+          float joint=(1.-smoothstep(.04,.16,abs(fault)))*smoothstep(.31,.65,strata+grain);
+          float seam=1.-smoothstep(.018,.15,abs(fract(shear*.72+strata*.54)-.5));
+          vec3 stone=mix(vec3(.115,.136,.137),vec3(.40,.375,.31),clamp(strata*1.15+.24*grain,0.,1.));
+          stone*=.87+grain*.52-seam*.075-joint*.18;
+          diffuseColor.rgb=mix(diffuseColor.rgb,stone,cover.x);
+          diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.76,.83,.87)*(.86+.2*grain),cover.y);
+        }`);
+  };
+  return soilMesh(m,'shore');
 }
 function lakeSurface(root,material){
   const pos=[],bed=[],idx=[],rings=45,sides=156;
@@ -27,50 +63,6 @@ function lakeSurface(root,material){
   g.setAttribute('lakeClarity',new T.BufferAttribute(new Float32Array(pos.length/3).fill(1),1));
   const water=new T.Mesh(g,material);root.add(water);
 }
-function waterfall(root,b){
-  const {x,z}=falls;
-  // A dark, stepped escarpment leaves the falling sheet in front of the rock face.
-  for(let i=-8;i<=8;i++)for(let j=0;j<3;j++){
-    const h=Math.max(1.3,9.2-.61*Math.abs(i)+Math.cos(i*.77)*.8);
-    b.put('stone',tint(j===2?'#69725d':'#59615c',.15),x+i*1.55,h*(.12+j*.31),z+4.2+Math.cos(i*.79)*.55,4.7,h*.66,6.5,range(-.13,.13),range(-.3,.3),range(-.12,.12),'stone');
-  }
-  const pos=[],uv=[],idx=[],across=28,rows=29;
-  for(let j=0;j<=rows;j++)for(let i=0;i<=across;i++){
-    const s=i/across,u=j/rows,w=s*2-1;
-    pos.push(x+w*(2.5+u*.89)+.12*Math.sin(s*7),9.45*(1-u*u)-.14*w*w,z+3.3-3.8*Math.sin(u*Math.PI*.51)+.11*Math.cos(w*10));
-    uv.push(s,u);
-    if(i&&j){const k=j*(across+1)+i;idx.push(k-across-2,k-1,k,k-across-2,k,k-across-1);}
-  }
-  const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(pos,3));geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));geometry.setIndex(idx);geometry.computeVertexNormals();
-  const clock={value:0};
-  const curtain=new T.MeshStandardMaterial({color:'#c0dfd9',roughness:.42,transparent:true,opacity:.9,side:T.DoubleSide});
-  curtain.onBeforeCompile=shader=>{
-    shader.uniforms.fallsClock=clock;
-    shader.vertexShader='varying vec2 chute;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n chute=uv;');
-    shader.fragmentShader='varying vec2 chute;uniform float fallsClock;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-      float lane=sin(chute.x*143.+1.2*sin(chute.y*9.-fallsClock*3.)+.8*sin(chute.x*41.));
-      float glint=sin(chute.y*58.-fallsClock*13.+chute.x*49.);
-      diffuseColor.rgb*=.66+.38*smoothstep(-.9,.74,lane+.44*glint);
-      diffuseColor.a*=.68+.32*smoothstep(-1.,.5,lane);`);
-  };
-  const sheet=new T.Mesh(geometry,curtain);root.add(sheet);
-  // The spray fans out from the foot of the falls. Its particles loop ballistically.
-  const sprayPos=new Float32Array(95*3),sprayG=new T.BufferGeometry();
-  sprayG.setAttribute('position',new T.BufferAttribute(sprayPos,3));
-  const spray=new T.Points(sprayG,new T.PointsMaterial({color:'#e1e9dc',size:.14,transparent:true,opacity:.63,depthWrite:false}));
-  spray.position.set(x,.06,z-.5);spray.frustumCulled=false;root.add(spray);
-  return t=>{
-    clock.value=t;
-    for(let i=0;i<95;i++){
-      const a=(i*.618033+t*(.7+(i%7)*.073))%1;
-      sprayPos[i*3]=Math.sin(i*1.71)*3.3+Math.cos(i)*a*.7;
-      sprayPos[i*3+1]=a*(1-a)*(2+(i%5)*.7);
-      sprayPos[i*3+2]=Math.sin(i*2.6)*.44-a*(.6+(i%9)*.19);
-    }
-    sprayG.attributes.position.needsUpdate=true;
-  };
-}
-
 function southernRidge(root,b){
   // Fold two wooded ridges around the far shore. Taper their ends into the valley.
   const pos=[],cols=[],idx=[],count=110;
@@ -78,12 +70,14 @@ function southernRidge(root,b){
     const a=-.36+i/count*(Math.PI+.75),r=1.19+row*.103,p=lakePoint(a,r);
     const fringe=Math.min(1,i/12,(count-i)/12);
     const peak=10+4*Math.sin(a*7)+3*Math.cos(a*13)+2*Math.sin(a*24);
-    const y=lakeHeightForRidge(p,r,row,peak)*fringe-2.8;
+    const native=lakeHeightForRidge(p,r,row,peak)*fringe-2.8;
+    const cover=alderInfluence(p.x,p.z);
+    const y=native+cover*(Math.min(native,height(p.x,p.z)-8)-native);
     pos.push(p.x,y,p.z);
     const c=new T.Color(row>8?'#758781':'#526b59').lerp(new T.Color('#888c7a'),Math.max(0,(y-8)/22));
     c.multiplyScalar(.92+.10*Math.cos(a*24+row*.65));cols.push(c.r,c.g,c.b);
     if(i&&row){const k=row*(count+1)+i;idx.push(k-count-2,k-1,k,k-count-2,k,k-count-1);}
-    if(row>1&&y>2&&row<10&&i%3){
+    if(row>1&&y>2&&row<10&&i%3&&cover<.12){
       const h=2+.9*Math.cos(i*3.4+row);b.put('pine',tint('#476451'),p.x,y+h*.39,p.z,h*.56,h,h*.56,0,a);
     }
   }
@@ -117,14 +111,16 @@ function approach(root,b){
 export function buildLakeScenery(root,waterMaterial){
   const b=new Builder(root),map=grassMap();
   // The east woodland already supplies the portion east of x=54.25 up to z=102.64.
-  const shores=[groundPatch(root,-35,54.25,54.25,182,map),groundPatch(root,54.25,96,102.64,182,map)];
+  const shores=[groundPatch(root,-35,54.25,54.25,lipZ+80,map),groundPatch(root,54.25,96,102.64,lipZ+80,map)];
   southernRidge(root,b);approach(root,b);lakeSurface(root,waterMaterial);
-  const fallTick=waterfall(root,b);
+  buildAlderFalls(root,b,waterMaterial);
   const trunks=[];
   for(let i=0;i<245;i++){
     const a=range(0,TAU),r=range(1.09,1.49),{x,z}=lakePoint(a,r);
-    if((Math.abs(x-dock.x)<4&&z<lake.z)||x< -34||z<54.25||x>93)continue;
+    if((Math.abs(x-dock.x)<4&&z<lake.z)||x< -34||z<54.25||x>93||
+      (z>lipZ-3&&Math.abs(x-alderX(z-lipZ))<alderWidth(z-lipZ)+2.7))continue;
     const y=height(x,z),h=range(3.2,9.6);
+    if(z>lipZ-5 && Math.hypot(height(x+.5,z)-height(x-.5,z),height(x,z+.5)-height(x,z-.5))>.72)continue;
     b.put('cyl',tint('#655646'),x,y+h*.28,z,h*.05,h*.60,h*.05,0,0,0,'wood');
     trunks.push({x,z,r:h*.025+.17});
     if(i%4){
@@ -150,6 +146,6 @@ export function buildLakeScenery(root,waterMaterial){
     }
   }
   b.finish();
-  return {shores,tick:fallTick,clear(x,z){return !trunks.some(tree=>(tree.x-x)**2+(tree.z-z)**2<tree.r**2)&&
+  return {shores,clear(x,z){return !trunks.some(tree=>(tree.x-x)**2+(tree.z-z)**2<tree.r**2)&&
     !(Math.abs(x-falls.x)<13&&z>falls.z+.5&&z<falls.z+7.5);}};
 }

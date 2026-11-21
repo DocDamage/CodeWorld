@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {createCatchment,LAND,BROOK,OUTLET} from './catchment.js';
-import {riverX,riverWidth,inPlot} from './layout.js';
+import {riverX,riverWidth,inPlot,springZ} from './layout.js';
 import {lakeRadius} from './lake-layout.js';
 import {moatDistance} from './estate.js';
 import {fieldPlan,inFarm,underFarmRoof} from './farm-layout.js';
@@ -19,7 +19,7 @@ export function buildRainwater(scene,sample,uniforms,fields){
     const ground=sample(x,z);
     if(!ground)continue;
     bed[i]=ground.y;kind[i]=LAND;
-    if(Math.abs(z)<53&&Math.abs(x-riverX(z))<riverWidth(z)+.4&&ground.y<brookStage(z))kind[i]=BROOK;
+    if(z>=springZ&&z<53&&Math.abs(x-riverX(z))<riverWidth(z)+.4&&ground.y<brookStage(z))kind[i]=BROOK;
     else if((z>54&&lakeRadius(x,z)<1)||(sd<8&&ground.y<2.52)||k===0||k===cols-1||j===0||j===rows-1)kind[i]=OUTLET;
   }
   const plots=fieldPlan.map(field=>({field,bare:fields[field.crop].stage==='fallow'}));

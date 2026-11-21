@@ -20,8 +20,18 @@ test('woodland animals emit typed, grounded contacts through the optional callba
   const {buildHunting}=await import('../src/hunting.js');
   const scene=new T.Scene(),camera=new T.PerspectiveCamera(),trees=new T.Group(),marks=[];
   camera.position.set(45,1.6,40);
-  const hunting=buildHunting(scene,camera,()=>0,()=>true,trees,()=>{},mark=>marks.push(mark));
-  for(let i=0;i<1200;i++)hunting.tick(1/60,false,false);
+  const trunk={x:67,z:3,r:.8},clear=(x,z)=>Math.hypot(x-trunk.x,z-trunk.z)>=trunk.r;
+  const hunting=buildHunting(scene,camera,()=>0,clear,trees,()=>{},mark=>marks.push(mark));
+  let stag;
+  scene.traverse(object=>{if(object.userData.animal?.spec.form==='stag')stag=object.userData.animal;});
+  assert.ok(stag,'red deer rig is available');
+  const stagBox=new T.Box3().setFromObject(stag.rig.root),stagSize=new T.Vector3();stagBox.getSize(stagSize);
+  assert.ok(stag.collisionRadius>=Math.max(stagSize.x,stagSize.z)*.5-.02,'deer clearance contains the rendered body and antlers');
+  for(let i=0;i<1200;i++){
+    hunting.tick(1/60,false,false);
+    if(i%15===0)assert.ok(Math.hypot(stag.rig.root.position.x-trunk.x,stag.rig.root.position.z-trunk.z)>=trunk.r+stag.collisionRadius-.01,
+      'the full deer body remains outside the trunk');
+  }
   assert.ok(marks.length>12,'distance-driven woodland strides produce touchdowns');
   assert.ok(marks.some(mark=>mark.kind==='hoof'));
   assert.ok(marks.some(mark=>mark.kind==='paw'));

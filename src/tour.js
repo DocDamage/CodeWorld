@@ -114,8 +114,8 @@ const lakeShots=[
     point(shoal.x+1.5,3.3,shoal.z-2.6),point(shoal.x+.85,2.6,shoal.z-2.0),
     point(shoal.x,-.30,shoal.z),point(shoal.x,-.33,shoal.z)),
   shot('Alder Falls','lake',6,
-    groundPoint(falls.x+8,falls.z-6,3.4),groundPoint(falls.x+5.5,falls.z-4,2.8),
-    point(falls.x,5.1,falls.z+1.2),point(falls.x,.7,falls.z-.5)),
+    point(falls.x+14,26,falls.z-43),point(falls.x+5,6.4,falls.z-17),
+    point(falls.x+2,12,falls.z+6),point(falls.x,4.8,falls.z+1.2)),
 ];
 
 const trailA=trail.getPointAt(.07),trailB=trail.getPointAt(.19);

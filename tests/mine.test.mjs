@@ -1,5 +1,19 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {inPlot,nearPath,onBridge,riverWidth,riverX} from '../src/layout.js';
+import {MINE,mineTerrainCut} from '../src/mine-layout.js';
+import {height} from '../src/world-height.js';
+
+test('the surface mine and its approach sit on dry ground clear of the bridge and village lanes',()=>{
+  const {portal,yard}=MINE;
+  for(let z=portal.z-5;z<=yard.z+1;z+=.25)for(let x=portal.x-2;x<=portal.x+2;x+=.25){
+    assert.ok(!onBridge(x,z,1)&&!inPlot(x,z,.2)&&!nearPath(x,z,.1));
+    assert.ok(Math.abs(x-riverX(z))>riverWidth(z)+.4);
+  }
+  assert.ok(height(portal.x,portal.z-3)>portal.y+2.75);
+  assert.ok(!mineTerrainCut(portal.x,portal.z-3));
+  for(const p of [portal,yard])assert.ok(Math.abs(height(p.x,p.z)-p.y)<.04);
+});
 
 test('the mine railway is a continuous walkable grade between crypt and armory',async()=>{
   const {

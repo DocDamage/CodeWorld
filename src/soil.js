@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {lakeRadius} from './lake-layout.js';
-import {riverWidth,riverX} from './layout.js';
+import {riverWidth,riverX,springZ} from './layout.js';
 
 const clamp=x=>Math.min(1,Math.max(0,x));
 function dampness(x,z,type){
@@ -12,7 +12,7 @@ function dampness(x,z,type){
     return .12+.85*clamp(1.5-Math.min(wallow,trough));
   }
   if(z>52&&x>=-35)return .76*clamp(1-Math.abs(lakeRadius(x,z)-1)*15);
-  if(x<45)return .73*clamp(1-Math.abs(Math.abs(x-riverX(z))-riverWidth(z))*.38);
+  if(x<45&&z>=springZ-1)return .73*clamp(1-Math.abs(Math.abs(x-riverX(z))-riverWidth(z))*.38);
   return type==='trail'?.24:.10;
 }
 

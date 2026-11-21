@@ -2,13 +2,14 @@ import {soilMesh} from './soil.js';
 import {swayMaterial} from './foliage.js';
 import * as T from 'three';
 import { Builder, TAU, label, meshSurface, v, tint, range } from './model.js';
-import { farm, farmHeight, fieldAt, fieldPlan, farmFencePlan, farmStations } from './farm-layout.js';
+import { farm, farmClear, farmHeight, fieldAt, fieldPlan, farmFencePlan, farmStations } from './farm-layout.js';
 import {createFarmWork,milkingDuration} from './farm-state.js';
 import {buildFarmEquipment} from './farm-equipment.js';
 import {buildWorksites} from './farm-worksite.js';
 import {livestock} from './farm-livestock.js';
 import { mountSmoke } from './smoke.js';
 import {trackYaw,updateGait} from './animal-gait.js';
+import {moveWithClearance,nearestOpenPoint} from './animal-collision.js';
 
 export { farm, farmHeight, farmClear, fieldPlan, animalPlan } from './farm-layout.js';
 
@@ -413,7 +414,9 @@ export function buildFarm(scene, leafSources, saved, hasBronzeSickle, plantTrack
   farmhouse(b, root);barn(b);siloAndUtilities(b);coopsAndPens(b,root);windbreakAndOrchard(b,leafSources);
   const fields=crops(b,root,work),dairy=dairyStation(root,b,work),worksites=buildWorksites(root,b,work,vehicle);
   b.finish();
-  const animals = livestock(root);
+  const troughClear=(x,z)=>!farmStations.troughs.some(trough=>Math.abs(x-trough.x)<.70&&Math.abs(z-trough.z)<.30);
+  const animalClear=(x,z)=>troughClear(x,z)&&vehicle.clear(x,z);
+  const animals = livestock(root,animalClear);
   if(plantTrack)for(const creature of animals){
     const m=creature.userData.motion,animalKind=creature.userData.farmAnimal;
     const bird=animalKind==='chicken';m.touchdowns=new Uint8Array(m.limbs.length);
@@ -434,6 +437,13 @@ export function buildFarm(scene, leafSources, saved, hasBronzeSickle, plantTrack
       const trough=feeding.get(creature.userData.farmAnimal),atTrough=!m.inStall&&work.animals[trough.kind].fed>70&&m.phase%3.1<2.28;
       let px = atTrough?T.MathUtils.clamp(trough.x+Math.sin(m.phase)*2.5,m.area.minX+.75,m.area.maxX-.44):m.baseX+Math.sin(time*speed+m.phase)*(m.inStall?.13:1.14);
       let pz = atTrough?T.MathUtils.clamp(trough.z+Math.cos(m.phase)*2.3,m.area.minZ+.71,m.area.maxZ-.71):m.baseZ+Math.sin(time*speed*.71+m.phase*1.7)*(m.inStall?.07:.89);
+      // Coops occupy most of the nominal hen range. Route birds from their
+      // north doors around the outside wall before turning toward the trough.
+      if(atTrough&&trough.kind==='chicken'&&creature.position.z>42.7){
+        const passageX=m.baseX<-72?-78.85:-66.05;
+        if(Math.abs(creature.position.x-passageX)>.30){px=passageX;pz=Math.max(50.35,creature.position.z);}
+        else{px=passageX;pz=42.25;}
+      }
       if(player&&!m.inStall){
         const dx=px-player.x,dz=pz-player.z,space=trough.kind==='cow'?2.15:trough.kind==='pig'?1.43:.74;
         const distance=Math.hypot(dx,dz);
@@ -443,9 +453,15 @@ export function buildFarm(scene, leafSources, saved, hasBronzeSickle, plantTrack
           pz=T.MathUtils.clamp(player.z+Math.sin(direction)*space,m.area.minZ+.55,m.area.maxZ-.42);
         }
       }
+      if(!m.inStall&&vehicle.blocks(creature.position.x,creature.position.z,m.collisionRadius)){
+        const escape=nearestOpenPoint(animalClear,creature.position.x,creature.position.z,m.collisionRadius,m.area,4);
+        if(escape)creature.position.set(escape.x,heightAt(escape.x,escape.z),escape.z);
+      }
       const oldX=creature.position.x,oldZ=creature.position.z;
       const dx = px - oldX, dz = pz - oldZ;
-      creature.position.x += dx * Math.min(1, locomotionDt * 2.4); creature.position.z += dz * Math.min(1, locomotionDt * 2.4);
+      const blend=Math.min(1,locomotionDt*2.4);
+      const step=m.inStall?{x:oldX+dx*blend,z:oldZ+dz*blend}:moveWithClearance(animalClear,oldX,oldZ,dx*blend,dz*blend,m.collisionRadius);
+      creature.position.x=step.x;creature.position.z=step.z;
       const movedX=creature.position.x-oldX,movedZ=creature.position.z-oldZ,travel=Math.hypot(movedX,movedZ);
       if(travel>.00001){m.moveX=movedX/travel;m.moveZ=movedZ/travel;}
       const heading=!m.inStall&&Math.hypot(dx,dz)>.12?Math.atan2(-dz,dx):atTrough?Math.atan2(creature.position.z-trough.z,trough.x-creature.position.x):creature.rotation.y;
@@ -477,7 +493,7 @@ export function buildFarm(scene, leafSources, saved, hasBronzeSickle, plantTrack
       if (!m.inStall && player && Math.hypot(player.x - creature.position.x, player.z - creature.position.z) < 1.65) creature.rotation.y+=.28*dt*Math.sin(time+m.phase);
     }
   }
-  return {clear:vehicle.clear,tick,ground,stats,dairy,work,vehicle,fieldMaterials:fields.materials,
+  return {clear:vehicle.clear,animalClear,tick,ground,stats,dairy,work,vehicle,fieldMaterials:fields.materials,
     surfaceLift(x,z){return fieldAt(x,z)?.level===undefined?0:Math.abs(x+86)<.42?.042:.074;},
     nearbyTask(x,z,yaw){
       if(vehicle.mounted)return worksites.driverAction();

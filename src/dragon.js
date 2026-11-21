@@ -51,19 +51,27 @@ function shadeDragon(mesh,color){
   mesh.material.customProgramCacheKey=()=>`aurelith-scales-${color}`;
   return mesh;
 }
-function tapered(root,points,color,sides=12){
+function tapered(root,points,color,sides=12,previousSurface=null){
   const pos=[],idx=[],cols=[];
-  const line=new T.CatmullRomCurve3(points.map(a=>v(a[0],a[1],a[2])));
+  const line=new T.CatmullRomCurve3(points.map(a=>v(a[0],a[1],a[2])),false,'centripetal');
   const count=(points.length-1)*3+1;
   let previousAxis=null,horizontal=null;
   // Parallel-transport each cross-section around elbows and tail bends.
   // Using world-up at each ring would flip a limb abruptly near a vertical tangent.
   for(let i=0;i<count;i++){
-    const t=i/(count-1),p=line.getPoint(t),axis=line.getTangent(t).normalize();
+    const t=i/(count-1),p=line.getPoint(t),axis=i===0&&previousSurface?
+      v(...previousSurface.userData.taper.endAxis):line.getTangent(t).normalize();
     const f=t*(points.length-1),j=Math.min(points.length-2,Math.floor(f)),u=f-j;
     const w=T.MathUtils.lerp(points[j][3],points[j+1][3],u),h=T.MathUtils.lerp(points[j][4],points[j+1][4],u);
     if(previousAxis)horizontal.applyQuaternion(new T.Quaternion().setFromUnitVectors(previousAxis,axis)).normalize();
+    else if(previousSurface)horizontal=v(...previousSurface.userData.taper.endHorizontal);
     else{horizontal=v(0,1,0).cross(axis);if(horizontal.lengthSq()<.01)horizontal.set(1,0,0);horizontal.normalize();}
+    if(previousSurface&&i){
+      // Ease out of the parent's twist so the pad lies flat and the skull stays level.
+      const level=v(0,1,0).cross(axis).normalize();
+      if(level.dot(horizontal)<0)level.negate();
+      horizontal.lerp(level,Math.min(1,t*2)).normalize();
+    }
     previousAxis=axis;
     const vertical=axis.clone().cross(horizontal).normalize();
     for(let k=0;k<sides;k++){
@@ -71,8 +79,15 @@ function tapered(root,points,color,sides=12){
       pos.push(...pt.toArray());const c=tint(s<-.44&&color===skin?belly:color,.035);cols.push(c.r,c.g,c.b);
       if(i){const n=i*sides+k,j=i*sides+(k+1)%sides;idx.push(n-sides,j-sides,n,j-sides,j,n);}
     }
-  }for(let j=1;j<sides-1;j++){const end=(count-1)*sides;idx.push(0,j,j+1,end,end+j+1,end+j);}
-  const m=shadeDragon(meshSurface(root,pos,idx,cols,{roughness:.76,flatShading:false}),color);m.castShadow=true;return m;
+  }for(let j=1;j<sides-1;j++){
+    const end=(count-1)*sides;
+    idx.push(0,j+1,j,end,end+j,end+j+1);
+  }
+  const m=shadeDragon(meshSurface(root,pos,idx,cols,{roughness:.76,flatShading:false}),color);m.castShadow=true;
+  m.userData.taper={sides,rings:count,start:line.getPoint(0).toArray(),end:line.getPoint(1).toArray(),
+    startAxis:previousSurface?.userData.taper.endAxis??line.getTangent(0).normalize().toArray(),
+    endAxis:previousAxis.toArray(),endHorizontal:horizontal.toArray()};
+  return m;
 }
 function wing(root,s){
   const arm=[[.74,3,.0,.45,.45],[2.35,4.05,-.72,.34,.34],[3.9,5.65,-1.37,.25,.25],[4.57,6.36,-.87,.20,.21]];
@@ -119,10 +134,18 @@ export function makeDragon(parent){
   for(const s of [-1,1]){
     for(const back of [false,true]){
       const z=back?2.43:-.86;
-      tapered(body,[[s*.98,2.44,z,.61,.64],[s*1.69,1.96,z+.28,.51,.49],[s*2.10,.92,z+.49,.36,.43],[s*1.90,.44,z-.05,.25,.27],[s*1.96,.25,z-.89,.34,.20]],skin);
+      const end=`${back?'hind':'front'} ${s<0?'left':'right'}`;
+      const ankle=[s*1.90,.38,z-.18,.25,.25];
+      const leg=tapered(body,[[s*.98,2.44,z,.61,.64],[s*1.69,1.96,z+.28,.51,.49],[s*2.10,.92,z+.49,.36,.43],ankle],skin);
+      leg.name=`dragon ${end} leg`;
+      const foot=tapered(body,[ankle,[s*1.97,.18,z-.58,.35,.17],[s*1.97,.105,z-.84,.31,.095]],skin,12,leg);
+      foot.name=`dragon ${end} foot`;
       for(let k=-1;k<=1;k++){
-        const xx=s*(1.96+k*.24);
-        tapered(body,[[s*(1.96+k*.14),.27,z-.71,.15,.15],[xx,.22,z-1.12,.11,.10],[xx+s*k*.09,.16,z-1.45,.009,.014]],horn,7);
+        const spread=k*.25,xx=s*1.97+spread;
+        const toe=tapered(body,[[s*1.97+k*.08,.105,z-.77,.13,.085],[xx,.075,z-1.11,.105,.065],[xx+k*.04,.060,z-1.25,.075,.045]],skin,8);
+        toe.name=`dragon ${end} toe ${k+2}`;
+        const claw=tapered(body,[[xx+k*.04,.060,z-1.25,.075,.045],[xx+k*.055,.050,z-1.39,.045,.030],[xx+k*.065,.048,z-1.48,.006,.008]],horn,7);
+        claw.name=`dragon ${end} claw ${k+2}`;
       }
     }
     for(let j=0;j<13;j++){const z=-.71+j*.30,h=2.93-.14*Math.abs(z-1),xx=s*(1.35+.17*Math.sin(j*.3));
@@ -135,28 +158,37 @@ export function makeDragon(parent){
     const z=-.15+j*.53+row*.11,x=side*(1.40-.13*row-.055*j),y=2.28+.23*row-.08*j;
     b.put('leaf',tint(row%2?'#44363d':'#4e3a40',.11),x,y,z,.45,.19,.58,.12,0,side*(.42+.08*row));
   }
-  const neck=new T.Group();neck.position.set(0,2.77,-1.20);body.add(neck);const hb=new Builder(neck);
+  const neck=new T.Group();neck.name='dragon neck';neck.position.set(0,2.77,-1.20);body.add(neck);const hb=new Builder(neck);
   const eyelids=[];
-  tapered(neck,[[0,-.20,.30,.85,.91],[-.14,.18,-.58,.75,.82],[-.38,.76,-1.34,.62,.67],[-.39,1.40,-2.02,.55,.64],[-.23,1.61,-2.76,.58,.56]],skin);
-  tapered(neck,[[-.26,1.64,-2.23,.53,.45],[-.22,1.72,-2.80,.82,.58],[-.17,1.58,-3.30,.74,.47],[-.12,1.38,-3.93,.44,.30],[-.08,1.35,-4.28,.41,.23]],skin);
-  tapered(neck,[[-.20,1.28,-2.75,.57,.25],[-.15,1.17,-3.28,.57,.19],[-.09,1.12,-4.14,.36,.12]],belly);
+  const neckJoin=[-.23,1.61,-2.76,.62,.57];
+  const neckCore=tapered(neck,[[0,-.40,.85,.77,.80],[-.10,.10,-.54,.86,.90],[-.31,.69,-1.33,.72,.76],[-.39,1.31,-2.02,.63,.68],neckJoin],skin,18);
+  neckCore.name='dragon neck core';
+  const head=tapered(neck,[neckJoin,[-.20,1.71,-3.03,.85,.60],[-.16,1.65,-3.34,.78,.52],
+    [-.12,1.58,-3.65,.60,.37],[-.09,1.52,-4.08,.46,.26],[-.08,1.49,-4.36,.47,.24],[-.08,1.47,-4.52,.32,.17]],skin,18,neckCore);
+  head.name='dragon head';
   for(let j=0;j<10;j++){
     const f=j/9,z=-.63-f*3.42;
     hb.put('leaf',tint(j%2?belly:'#6a5650',.06),-.13,1.11+.12*Math.sin(f*Math.PI),z,.43-f*.09,.10,.31,0,0,(j%2-.5)*.16);
   }
   for(const s of [-1,1]){
     tapered(neck,[[s*.43-.24,1.98,-2.56,.27,.28],[s*.71-.24,2.40,-2.21,.21,.21],[s*.91-.24,2.75,-1.73,.13,.13],[s*.98-.24,3.04,-1.50,.01,.01]],horn);
-    hb.put('ball','#f5ac40',s*.67-.20,1.78,-3.10,.20,.21,.29,0,s*.45,0,'glow');
-    hb.put('ball','#262021',s*.749-.20,1.79,-3.16,.054,.155,.07);
+    const eyeX=s*.812-.19;
+    hb.put('ball','#423936',eyeX,1.79,-3.16,.25,.35,.45,0,s*.18,-s*.09);
+    hb.put('ball','#de9b39',eyeX+s*.074,1.80,-3.19,.17,.237,.32,0,s*.21,0,'glow');
+    hb.put('ball','#231c16',eyeX+s*.15,1.80,-3.20,.038,.187,.061,0,s*.21,0);
+    hb.put('ball','#fbeac0',eyeX+s*.159,1.86,-3.23,.026,.035,.038);
     const lid=new T.Mesh(new T.SphereGeometry(.5,12,8),new T.MeshStandardMaterial({color:skin,roughness:.84}));
-    lid.position.set(s*.665-.20,1.865,-3.126);lid.scale.set(.215,.006,.29);lid.rotation.y=s*.45;neck.add(lid);eyelids.push(lid);
-    hb.put('leaf',crest,s*.59-.20,1.98,-2.99,.37,.22,.65,0,s*.3);
+    lid.position.set(eyeX+s*.099,1.92,-3.19);lid.scale.set(.18,.006,.334);lid.rotation.y=s*.21;neck.add(lid);eyelids.push(lid);
+    tapered(neck,[[s*.63-.20,1.99,-2.91,.15,.11],[eyeX+s*.025,1.96,-3.13,.14,.095],
+      [s*.66-.16,1.90,-3.42,.085,.06],[s*.49-.12,1.78,-3.63,.018,.018]],skin,9);
     hb.put('leaf',tint(skin,.08),s*.54-.20,1.73,-3.45,.43,.17,.55,-.08,s*.31,s*.12);
-    hb.put('ball','#292524',s*.22-.08,1.48,-4.22,.134,.086,.088);
-    hb.put('ring','#463735',s*.22-.08,1.485,-4.235,.18,.11,.10,Math.PI/2,0,0);
-    for(let j=0;j<5;j++)hb.put('cone',horn,s*(.54-j*.032)-.12,1.23,-3.12-j*.20,.080,.16-.014*j,.082,0,0,Math.PI);
+    hb.put('ball','#4b4240',s*.30-.08,1.61,-4.32,.26,.18,.31,-.06,s*.30,0);
+    hb.put('ball','#201f20',s*.36-.08,1.65,-4.37,.16,.095,.17,-.18,s*.29,0);
+    for(let j=0;j<5;j++){
+      const f=j/4;
+      hb.put('cone',horn,s*(.43-.15*f)-.10,1.27+.06*f,-3.61-f*.74,.080,j===3?.19:.105,.082,0,.10*s,Math.PI);
+    }
     tapered(neck,[[s*.64-.24,1.64,-2.54,.22,.24],[s*1.02-.24,1.77,-2.17,.14,.14],[s*1.32-.24,1.82,-1.95,.01,.01]],crest);
-    for(let j=0;j<4;j++)hb.put('cone',horn,s*(.34-j*.028)-.10,1.31,-3.58-j*.19,.066,.14-j*.015,.065,0,0,Math.PI);
   }
   for(let j=0;j<7;j++){
     const f=j/6;hb.put('cone',crest,-.14-.17*Math.sin(f*Math.PI),.79+f*1.60,-.27-f*2.03,.23,.48-f*.10,.26,-.49);
@@ -164,9 +196,13 @@ export function makeDragon(parent){
   for(const s of [-1,1])for(let j=0;j<8;j++){
     const f=j/7;hb.put('leaf',tint('#ad674f'),s*(.71-.24*f)-.19,.29+f*1.34,-.24-f*1.95,.16,.26,.30,0,0,s*.26);
   }
-  const jaw=new T.Group();jaw.position.set(-.10,1.27,-3.50);neck.add(jaw);const jb=new Builder(jaw);
-  jb.put('ball',belly,0,-.05,-.34,.94,.28,1.47,-.08,0,0);jb.put('box',horn,0,.06,-.83,.54,.07,.08);
-  for(const s of [-1,1])for(let j=0;j<4;j++)jb.put('cone',horn,s*(.38-j*.035),.14,-.50-j*.22,.075,.15,.075,0,0,Math.PI);jb.finish();
+  const jaw=new T.Group();jaw.name='dragon lower jaw';jaw.position.set(-.14,1.35,-2.99);neck.add(jaw);
+  tapered(jaw,[[0,.06,.14,.47,.32],[0,-.065,-.31,.57,.24],[.03,-.10,-.72,.46,.17],
+    [.05,-.105,-1.13,.38,.125],[.06,-.10,-1.38,.35,.12],[.06,-.085,-1.49,.23,.085]],belly,16);
+  const jb=new Builder(jaw);
+  jb.put('ball','#513733',.04,.004,-.88,.76,.10,1.05);
+  for(const s of [-1,1])for(let j=0;j<4;j++)jb.put('cone',horn,s*(.36-j*.027)+.04,.027,-.67-j*.196,.057,.10,.061);
+  jb.finish();
   hb.finish();b.finish();
   const wings=[-1,1].map(s=>{const g=new T.Group();body.add(g);wing(g,s);return g;});
   const dialogue=createDragonDialogue();let awareness=0,voice=0;
@@ -195,9 +231,9 @@ export function makeDragon(parent){
       tail.rotation.y=settleTail(.083*Math.sin(t*.34)-gaze*.25,dt);tail.rotation.x=.012*Math.sin(t*.46);
       const wingAngle=settleWings(.018*Math.sin(t*.53)+.055*awareness,dt);
       wings.forEach((g,i)=>{const side=i?1:-1;g.rotation.z=side*wingAngle;g.rotation.x=.012*weight;});
-      voice=Math.max(0,voice-dt*.16);jaw.rotation.x=moveJaw(.045+voice*(.055+.068*Math.max(0,Math.sin(t*7.4))),dt);
+      voice=Math.max(0,voice-dt*.16);jaw.rotation.x=-moveJaw(.035+voice*(.055+.095*Math.max(0,Math.sin(t*7.4))),dt);
       const blink=Math.max(0,1-Math.abs((t+1.7)%5.84-5.48)*7.4);
-      for(const lid of eyelids){lid.visible=blink>.015;lid.position.y=1.865-.077*blink;lid.scale.y=.20*blink;}
+      for(const lid of eyelids){lid.visible=blink>.015;lid.position.y=1.92-.12*blink;lid.scale.y=.26*blink;}
     },
   };
 }

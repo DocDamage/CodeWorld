@@ -4,9 +4,8 @@ const mix=(a,b,t)=>a+(b-a)*t;
 export const MINE=Object.freeze({
   name:'Briarwick Ore Mine',
   entry:Object.freeze({x:41,z:7,y:-47.28,yaw:0}),
-  // These are the actual land.height values at the two surface rail points.
-  portal:Object.freeze({x:-3.2,z:6.15,y:.40208686038486086,yaw:0}),
-  yard:Object.freeze({x:-3.2,z:10.10,y:.3936135083104251,yaw:0}),
+  portal:Object.freeze({x:-5.8,z:21.8,y:1.44,yaw:0}),
+  yard:Object.freeze({x:-5.8,z:25.8,y:1.36,yaw:0}),
   capacity:6,
 });
 
@@ -29,6 +28,7 @@ const nodes=raw.map((point,index)=>{
   return Object.freeze({...point,y:mix(MINE.entry.y,MINE.portal.y,run/horizontal)});
 });
 nodes.push(MINE.yard);
+const minZ=Math.min(...nodes.map(p=>p.z)),maxZ=Math.max(...nodes.map(p=>p.z));
 
 const cumulative=[0];
 for(let i=1;i<nodes.length;i++)cumulative.push(cumulative[i-1]+Math.hypot(
@@ -37,6 +37,22 @@ for(let i=1;i<nodes.length;i++)cumulative.push(cumulative[i-1]+Math.hypot(
 export const MINE_ROUTE_LENGTH=cumulative.at(-1);
 export const MINE_ROUTE=Object.freeze(nodes);
 export const MINE_PORTAL_PROGRESS=cumulative.at(-2)/MINE_ROUTE_LENGTH;
+
+// All proximity queries reach at most eight metres from the track. Index the
+// expanded segment bounds once so a surface walking step reads one small bin.
+const reach=8,segmentsByCell=new Map();
+const cell=v=>Math.floor(v/reach);
+const cellKey=(x,z)=>x+','+z;
+for(let i=0;i<nodes.length-1;i++){
+  const a=nodes[i],b=nodes[i+1];
+  for(let cx=cell(Math.min(a.x,b.x)-reach);cx<=cell(Math.max(a.x,b.x)+reach);cx++){
+    for(let cz=cell(Math.min(a.z,b.z)-reach);cz<=cell(Math.max(a.z,b.z)+reach);cz++){
+      const key=cellKey(cx,cz);
+      if(!segmentsByCell.has(key))segmentsByCell.set(key,[]);
+      segmentsByCell.get(key).push(i);
+    }
+  }
+}
 
 function segmentForDistance(distance){
   let low=0,high=cumulative.length-1;
@@ -59,7 +75,7 @@ export function mineTangent(progress){
 
 function candidates(x,z,radius=1.42){
   const found=[];
-  for(let i=0;i<nodes.length-1;i++){
+  for(const i of segmentsByCell.get(cellKey(cell(x),cell(z)))??[]){
     const a=nodes[i],b=nodes[i+1],dx=b.x-a.x,dz=b.z-a.z,length2=dx*dx+dz*dz;
     const t=Math.max(0,Math.min(1,length2?((x-a.x)*dx+(z-a.z)*dz)/length2:0));
     const px=mix(a.x,b.x,t),pz=mix(a.z,b.z,t),distance=Math.hypot(x-px,z-pz);
@@ -79,8 +95,8 @@ export function mineAt(x,z,y,tolerance=.72){
 }
 
 export function mineNearby(x,z){
-  if(x<MINE.portal.x-8||x>MINE.entry.x+8||z<-51||z>50)return false;
-  return candidates(x,z,8).length>0;
+  if(x<MINE.portal.x-reach||x>MINE.entry.x+reach||z<minZ-reach||z>maxZ+reach)return false;
+  return candidates(x,z,reach).length>0;
 }
 
 export function mineFloor(x,z,previous,ground=previous){
@@ -112,7 +128,22 @@ export function mineLayer(x,z,y){
 
 export function mineTerrainCut(x,z,margin=0){
   const dz=z-MINE.portal.z;
-  return Math.abs(x-MINE.portal.x)<1.92+margin && dz>=-4.98-margin && dz<.5+margin;
+  return Math.abs(x-MINE.portal.x)<1.92+margin && dz>=-1.3-margin && dz<.5+margin;
+}
+
+export function inMineYard(x,z,margin=0){
+  return Math.abs(x-MINE.yard.x)<2.25+margin&&z>MINE.portal.z-1.2-margin&&z<MINE.yard.z+1.45+margin;
+}
+
+export function mineYardGround(x,z,ground){
+  const dx=Math.abs(x-MINE.portal.x),dz=z-MINE.portal.z;
+  if(dx>5.3||dz< -8||dz>7.4)return ground;
+  const blend=t=>clamp01(t)**2*(3-2*clamp01(t));
+  const track=mix(MINE.portal.y,MINE.yard.y,clamp01(dz/(MINE.yard.z-MINE.portal.z)));
+  const shoulder=blend((5.3-dx)/2.5)*blend((dz+8)/3)*blend((7.4-dz)/2);
+  // The exposed drift has a bank of earth over its roof and a level loading apron.
+  const roof=3.35*blend(-dz/1.1)*blend((dz+8)/2.5);
+  return mix(ground,track+roof,shoulder);
 }
 
 export function mineCatacombDoorway(localX,localZ,margin=0){
