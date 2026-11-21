@@ -1,3 +1,5 @@
+import {applyTurf} from './meadow.js';
+import {plantShrub,plantTree} from './trees.js';
 import {soilMesh} from './soil.js';
 import {swayMaterial} from './foliage.js';
 import * as T from 'three';
@@ -36,6 +38,7 @@ function terrain(root) {
   }
   const ground = meshSurface(root, positions, indices, colors, { roughness: 1 });
   ground.geometry.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2));
+  applyTurf(ground,(x,z)=>!fieldAt(x,z,.2)&&Math.abs(z-24)>2.2&&!(z>22&&Math.abs(x+86)<1.7));
   ground.name = 'Farm terrain';soilMesh(ground,'pasture');
   return ground;
 }
@@ -184,17 +187,13 @@ function windbreakAndOrchard(b, leafSources) {
   ];
   for (const [x, z, size] of trees) {
     const y = heightAt(x, z), trunk = 2.2 + size * .32;
-    b.put('cyl', darkTimber, x, y + trunk / 2, z, .28 + size * .055, trunk, .28 + size * .055, 0, 0, 0, 'wood');
-    for (let k = 0; k < 5; k++) {
-      const angle = k * 2.4, spread = size * .35;
-      b.put('crown', k % 2 ? '#557441' : '#6d874c', x + Math.sin(angle) * spread, y + trunk + .5 + (k % 3) * .28, z + Math.cos(angle) * spread, size * .72, size * .64, size * .72, 0, angle, 0, 'canopy');
-    }
+    plantTree(b,'beech',x,y,z,trunk+2.28,size*1.95);
     leafSources?.add?.(x, y + trunk + .7, z, size * .88);
   }
   // Low hedging screens the farmhouse garden without creating another hard boundary.
   for (let z = 28; z <= 52; z += 2.2) {
     const x = -96.2, y = heightAt(x, z);
-    b.put('crown', z % 4 < 2 ? '#617b49' : '#708950', x, y + .67, z, 1.35, 1.2, 1.15, 0, z, 0, 'canopy');
+    plantShrub(b,x,y,z,1.46,2.72);
     if (Math.round(z) % 7 === 0) leafSources?.add?.(x, y + .75, z, .9);
   }
 }

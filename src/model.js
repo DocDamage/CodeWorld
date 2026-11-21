@@ -57,6 +57,10 @@ export function registerSharedMaterial(name,material) {
   if(!name||materials[name])return false;
   materials[name]=material;return true;
 }
+export function registerSharedGeometry(name,geometry) {
+  if(!name||geometries[name]||!geometry?.isBufferGeometry)return false;
+  geometries[name]=geometry;return true;
+}
 const angles = new T.Euler(), rot = new T.Quaternion();
 const unitY = v(0,1,0);
 export class Builder {

@@ -76,3 +76,22 @@ test('crops grow from anchored foliage before their harvest forms, with distinct
   const treeFlex=getSharedMaterial('canopy').userData.foliageStrength;
   assert.ok(branchFlex<treeFlex&&treeFlex<cropFlex,'wood, crowns, and crops react with different flexibility');
 });
+test('living trees retain woody trunks and cutout, wind-driven branch sprays in shared batches',async()=>{
+  const {Builder}=await import('../src/model.js'),{plantTree}=await import('../src/trees.js');
+  const group=new T.Group(),builder=new Builder(group);
+  for(const x of [3,7])plantTree(builder,'beech',x,2,4,6);
+  plantTree(builder,'fir',12,1,8,7);
+  const meshes=builder.finish();
+  assert.equal(meshes.length,4,'each species uses one wood and one foliage draw batch');
+  const foliage=meshes.filter(mesh=>mesh.material.alphaTest>0);
+  assert.equal(foliage.length,2);
+  assert.ok(foliage.some(mesh=>mesh.count===2));
+  for(const mesh of foliage){
+    assert.ok(mesh.material.map&&mesh.geometry.getAttribute('uv'));
+    assert.equal(mesh.customDepthMaterial.map,mesh.material.map);
+    const shader={uniforms:{},fragmentShader:'',vertexShader:'#include <beginnormal_vertex>\n#include <begin_vertex>'};
+    mesh.material.onBeforeCompile(shader);
+    assert.ok(shader.vertexShader.includes('smoothstep(.06,1.,position.y)'),'root is pinned and upper branches yield');
+    assert.ok(shader.vertexShader.includes('leafTime*5.3'),'finer foliage flutter follows wind');
+  }
+});

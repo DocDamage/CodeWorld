@@ -7,45 +7,18 @@ import { trailDistance } from './estate.js';
 import { Builder,v,TAU,range,random,tint,pick,meshSurface } from './model.js';
 import { height,inPlot,nearPath,nearFarmLane,riverX,riverWidth,smooth } from './land.js';
 import { millWheel } from './hydraulics.js';
-import { swayMaterial } from './foliage.js';
+import {plantShrub,plantTree,ridgeTree} from './trees.js';
 import { farm,inFarm } from './farm-layout.js';
 import {springZ} from './layout.js';
 import {inMineYard} from './mine-layout.js';
 
-function leafTexture() {
-  const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
-  const ctx=canvas.getContext('2d');
-  for(let i=0;i<1800;i++){
-    const a=range(0,TAU),r=Math.sqrt(random()),edge=.80+.10*Math.sin(a*5+.2)+.064*Math.cos(a*9);
-    if(r>edge)continue;
-    const x=64+60*r*Math.cos(a),y=64+60*r*Math.sin(a);
-    const l=Math.round(range(56,87)-y*.07);
-    ctx.fillStyle='hsl(61, 14%, '+l+'%)';ctx.beginPath();ctx.ellipse(x,y,range(1.1,3.9),range(.9,2.1),range(-1.2,1.2),0,TAU);ctx.fill();
-  }
-  const tex=new T.CanvasTexture(canvas);tex.colorSpace=T.SRGBColorSpace;return tex;
-}
 export function plantValley(root,b,leaves) {
-  const foliage=[],treePositions=[];
-  function tree(x,z,s,rich=true){
+  const treePositions=[];
+  function tree(x,z,s){
     if(inFarm(x,z)||nearFarmLane(x,z,2.4)||inPlot(x,z,2.6)||nearPath(x,z,1.45)||(x>14&&trailDistance(x,z)<3.2)||
       inMineYard(x,z,2))return;
     const y=height(x,z)-.08,base=v(x,y,z);
-    const fork=v(x+range(-.23,.23)*s,y+2.2*s,z+range(-.23,.23)*s);
-    b.beam(tint('#554d40'),base,fork,.46*s,.40*s,'cyl','plantWood');
-    for(let i=0;i<5;i++){
-      const a=i*TAU/5+range(-.35,.35),r=range(.63,1.39)*s;
-      const end=v(fork.x+Math.cos(a)*r,y+range(3.1,4.45)*s,fork.z+Math.sin(a)*r);
-      b.beam(tint('#5e5341'),fork.clone().lerp(base,range(.0,.34)),end,.22*s,.22*s,'cyl','plantWood');
-      const size=range(1.8,2.7)*s,col=pick(['#536843','#66734a','#5c7045','#6b7950','#737d51']);
-      b.put('crown',tint(col,.07),end.x,end.y,end.z,size*.82,size*.57,size*.80,range(-.24,.24),a,0,'canopy');
-      if(rich)for(let j=0;j<21;j++){
-        const phi=range(0,TAU),incl=range(-.62,.96),rad=Math.sqrt(1-incl*incl);
-        const p=v(end.x+Math.cos(phi)*size*.40*rad,end.y+size*.31*incl,end.z+Math.sin(phi)*size*.40*rad);
-        const q=new T.Quaternion().setFromEuler(new T.Euler(-incl*.9,Math.PI/2-phi,range(-.65,.65),'YXZ'));
-        const sc=size*range(.53,.76);
-        foliage.push({m:new T.Matrix4().compose(p,q,v(sc,sc*.80,1)),c:tint(col,.1).multiplyScalar(1.2+incl*.15)});
-      }
-    }
+    plantTree(b,'beech',x,y,z,5.25*s);
     leaves?.add(x,y+3.8*s,z,s*1.35);treePositions.push([x,z,s]);return base;
   }
   for(const [x,z,s] of [[-19,11,1.13],[11,2.4,1.24],[-4.8,-10,.93],[20,-13,1.06],[-27,-9,1.1],[-21,17,1.2],[18,13,1.28],[-19,-19,1],[-12,-23,1.03],[5,-26,.96],[22,-4,1.17]])tree(x,z,s);
@@ -53,16 +26,13 @@ export function plantValley(root,b,leaves) {
     const x=range(-50,50),z=range(-50,38);
     if(x>-32&&x<22&&z>-25&&z<28 || inPlot(x,z,3.2)||nearPath(x,z,2)||Math.abs(x-riverX(z))<riverWidth(z)+2.5)continue;
     if(treePositions.some(([xx,zz])=>(xx-x)**2+(zz-z)**2<13))continue;
-    tree(x,z,range(.69,1.32),Math.hypot(x,z)<42);
+    tree(x,z,range(.69,1.32));
   }
-  const canopy=new T.InstancedMesh(new T.PlaneGeometry(1,1),new T.MeshStandardMaterial({map:leafTexture(),alphaTest:.46,side:T.DoubleSide,roughness:.96,metalness:0}),foliage.length);
-  swayMaterial(canopy.material,{strength:1.08});
-  foliage.forEach(({m,c},i)=>{canopy.setMatrixAt(i,m);canopy.setColorAt(i,c);});canopy.receiveShadow=true;root.add(canopy);
   for(let i=0;i<3100;i++){
     const x=range(-35,33),z=range(-33,33);
-    if(inMineYard(x,z,.5)||inPlot(x,z,.5)||nearPath(x,z,1)||nearFarmLane(x,z,1.15)||Math.abs(x-riverX(z))<riverWidth(z)+.32)continue;
+    if((x>16&&trailDistance(x,z)<1.82)||inMineYard(x,z,.5)||inPlot(x,z,.5)||nearPath(x,z,1)||nearFarmLane(x,z,1.15)||Math.abs(x-riverX(z))<riverWidth(z)+.32)continue;
     const y=height(x,z),s=range(.20,.89),c=pick(['#5d7047','#788052','#69784e','#566943']);
-    if(i%4===0){b.put('crown',tint(c),x,y+s*.21,z,s*1.3,s*.79,s,range(-.22,.22),range(0,TAU),0,'plant');if(i%20===0)leaves?.add(x,y+s*.55,z,s*.45);}
+    if(i%4===0){plantShrub(b,x,y,z,s*.86,s*1.6);if(i%20===0)leaves?.add(x,y+s*.55,z,s*.45);}
     else if(i%3===0){b.put('leaf',tint('#a5a38c'),x,y,z,s*.84,s*.48,s,range(-.3,.3),range(0,6));}
     else {
       const flower=pick(['#eee5be','#f6d77a','#c796b0','#b39cbd','#efebcb']);
@@ -129,7 +99,7 @@ function mountains(root) {
     c.multiplyScalar(.88+.105*Math.sin(x*.21+z*.24)+crags*.043);
     if(i<n&&r>59&&r<115&&lakeCut<.02&&west>.98&&east<.05&&y>1.5&&y<16&&Math.sin(i*1.71+j*.86)>.05){
       const h=1.8+1.05*Math.cos(i*2.43+j);
-      conifers.put('pine',new T.Color('#405c4c').multiplyScalar(.9+.1*crags),x,y+h*.42,z,h*.44,h,h*.44,0,a);
+      ridgeTree(conifers,x,y,z,h,a);
     }
     cols.push(c.r,c.g,c.b);if(j&&i){const k=j*(n+1)+i;idx.push(k-n-2,k-1,k,k-n-2,k,k-n-1);}
   }meshSurface(root,pos,idx,cols,{roughness:1,flatShading:false});conifers.finish();

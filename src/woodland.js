@@ -1,7 +1,9 @@
+import {applyTurf} from './meadow.js';
+import {plantTree} from './trees.js';
 import {soilMesh} from './soil.js';
 import * as T from 'three';
 import { Builder,v,pick,tint,range,TAU,meshSurface,label } from './model.js';
-import { height,grassMap } from './land.js';
+import { height,grassMap,grassAllowed } from './land.js';
 import { estate,moatDistance,trail,trailDistance } from './estate.js';
 import { lantern } from './houses.js';
 import { CASTLE_LAYOUT } from './castle.js';
@@ -23,27 +25,8 @@ function easternGround(root){
   }
   const forestMap=grassMap();
   const m=meshSurface(root,pos,idx,cols,{map:forestMap,bumpMap:forestMap,bumpScale:.021,roughness:.98,flatShading:false});m.geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+  applyTurf(m,(x,z)=>grassAllowed(x,z,'woodland'));
   return soilMesh(m,'forest');
-}
-function pine(b,x,z,s){
-  const y=height(x,z),a=range(0,TAU);
-  b.put('cyl',tint('#5d5042'),x,y+2.85*s,z,.39*s,6.15*s,.39*s,0,0,0,'agedWood');
-  for(let k=0;k<7;k++){
-    const h=(1.82+k*.72)*s,w=(3.58-k*.39)*s,lean=.08*Math.sin(a+k*1.7)*s;
-    b.put('pine',tint(pick(['#354f3d','#405b43','#496148','#3c5740']),.07),x+lean,y+h+s*.79,z-lean*.4,w,1.92*s,w,.025,a+k*.58,0,'canopy');
-    for(let j=0;j<3;j++){const t=a+j*TAU/3+k*.43,r=w*.25;
-      b.put('pine',tint('#465e44',.08),x+r*Math.sin(t),y+h+.45*s,z+r*Math.cos(t),w*.49,1.08*s,w*.51,.10,t,0,'canopy');}
-  }
-  b.put('spire','#435941',x,y+6.45*s,z,.68*s,1.45*s,.68*s,0,a,0,'canopy');
-}
-function beech(b,x,z,s){
-  const y=height(x,z),a=range(0,TAU);
-  b.beam('#625949',v(x,y-.1,z),v(x+.12*s,y+3.3*s,z),.46*s,.40*s,'cyl','plantWood');
-  for(let j=0;j<6;j++){
-    const ang=a+j*2.4,r=(j===5?.25:1.16)*s,h=(j===5?5.35:range(3.85,4.85))*s,xx=x+Math.sin(ang)*r,zz=z+Math.cos(ang)*r;
-    b.beam('#655a48',v(x+.1*s,y+2.34*s,z),v(xx,y+h,zz),.18*s,.18*s,'cyl','plantWood');
-    b.put('crown',tint(pick(['#566f48','#5c7048','#6b7950','#4d6746']),.08),xx,y+h,zz,s*2.64,s*1.85,s*2.57,.15,ang,0,'canopy');
-  }
 }
 function trailMesh(root,b){
   const n=Math.ceil(trail.getLength()/.35),pos=[],col=[],idx=[],uv=[];
@@ -92,7 +75,7 @@ export function buildWoodland(root,leaves){
       const x=cx+range(0,24),z=cz+range(0,24),dist=trailDistance(x,z),moat=moatDistance(x,z);
       if(dist<2.9||moat<12||catacombTerrainCut(x,z,3.4)||x<51&&dist>9||x<54.25&&Math.abs(z)>49)continue;
       if(x>estate.x-20&&x<estate.x+18&&z>estate.z+23&&z<estate.z+53&&Math.abs(x-estate.x)<9)continue;
-      const s=range(.87,1.65);if(j%3===0)beech(trees,x,z,s);else pine(trees,x,z,s);
+      const s=range(.87,1.65);plantTree(trees,j%3===0?'beech':'fir',x,height(x,z),z,(j%3===0?5.6:6.85)*s);
       if(j%3===0)leaves?.add(x,height(x,z)+4.9*s,z,s*1.4);
       const pineCrown=j%3===0?null:{base:height(x,z)+1.6*s,radius:1.87*s};
       register(x,z,s*.24+.16,'trees',pineCrown);

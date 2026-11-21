@@ -2,10 +2,10 @@ import {height,smooth} from './world-height.js';
 import {soilMesh} from './soil.js';
 import {brookStage,cobbles,riffle} from './brook.js';
 import * as T from 'three';
-import { atLake,onLakeDock,lakeWalkable,dock } from './lake-layout.js';
+import { atLake,onLakeDock,lakeWalkable,lakeRadius,alderInfluence,dock } from './lake-layout.js';
 import { moatDistance,trailDistance } from './estate.js';
 import { v,TAU,range,random,tint,pick,meshSurface,label } from './model.js';
-import { swayMaterial } from './foliage.js';
+import {applyTurf,meadowMesh} from './meadow.js';
 import { farmClear,fieldAt,inFarm } from './farm-layout.js';
 import { inMineYard,mineTerrainCut } from './mine-layout.js';
 import { catacombTerrainCut } from './catacomb-layout.js';
@@ -106,63 +106,29 @@ export function terrain(root,b) {
     const s=range(.10,.38);
     b.put('stone',tint(pick(['#77796e','#89897c','#696f67','#989080']),.10),x,height(x,z)+s*.15,z,s*range(.8,1.35),s*.44,s,range(-.25,.25),range(0,TAU),0,'stone');
   }
+  applyTurf(ground,(x,z)=>grassAllowed(x,z,'village'));
   return soilMesh(ground);
 }
 const grassZones=Object.freeze([
-  Object.freeze({name:'village',minX:-37,maxX:38,minZ:-36,maxZ:38,attempts:16000,seed:0x3ca71}),
-  Object.freeze({name:'farm',minX:-111.5,maxX:-44.5,minZ:10.5,maxZ:92.5,attempts:14500,seed:0xfa471}),
-  Object.freeze({name:'woodland',minX:55,maxX:216,minZ:-101,maxZ:61,attempts:19500,seed:0x70dd5}),
+  Object.freeze({name:'village',minX:-54.25,maxX:54.25,minZ:-54.25,maxZ:54.25,seed:0x3ca71}),
+  Object.freeze({name:'farm',minX:-111.5,maxX:-44.5,minZ:10.5,maxZ:92.5,seed:0xfa471}),
+  Object.freeze({name:'woodland',minX:54.25,maxX:216,minZ:-101,maxZ:61,seed:0x70dd5}),
+  Object.freeze({name:'lakeshore',minX:-35,maxX:96,minZ:54.25,maxZ:146,seed:0x113af}),
 ]);
 
 export function grassAllowed(x,z,zone){
-  if(zone==='village')return !inMineYard(x,z,.3)&&!mineTerrainCut(x,z,.42)&&!inPlot(x,z,.48)&&!nearPath(x,z,.52)&&
+  if(zone==='lakeshore')return lakeRadius(x,z)>1.035&&alderInfluence(x,z)<.18;
+  if(zone==='village')return !inFarm(x,z)&&(x<16||trailDistance(x,z)>1.8)&&!inMineYard(x,z,.3)&&!mineTerrainCut(x,z,.42)&&!inPlot(x,z,.48)&&!nearPath(x,z,.52)&&
     !nearFarmLane(x,z,1.42)&&Math.abs(x-riverX(z))>=riverWidth(z)+.46&&!atLake(x,z);
   if(zone==='farm')return inFarm(x,z)&&!fieldAt(x,z,.42)&&farmClear(x,z)&&
     Math.abs(z-24)>=2.35&&!(z>22&&Math.abs(x+86)<1.78)&&Math.hypot(x+55.5,z-39.5)>=2.75;
-  if(zone==='woodland')return !atLake(x,z)&&trailDistance(x,z)>=2.36&&moatDistance(x,z)>=9&&
+  if(zone==='woodland')return !(x<=96&&z>=54.25)&&!atLake(x,z)&&trailDistance(x,z)>=2.36&&moatDistance(x,z)>=9&&
     !catacombTerrainCut(x,z,1.4);
   return false;
 }
 
-function grassRandom(seed){
-  let state=seed>>>0;
-  return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};
-}
-
-function grassMesh(root,zone){
-  const pos=[],idx=[],cols=[],flex=[],rng=grassRandom(zone.seed),palette=['#49613a','#597044','#68794c','#748354','#5d7443'];
-  const between=(a,b)=>a+(b-a)*rng();
-  for(let i=0;i<zone.attempts;i++){
-    const x=between(zone.minX,zone.maxX),z=between(zone.minZ,zone.maxZ);
-    if(!grassAllowed(x,z,zone.name))continue;
-    const y=height(x,z)-.018,tuft=between(.21,.54)*(zone.name==='woodland'?.9:1);
-    for(let j=0;j<3;j++){
-      const a=between(0,TAU),dx=Math.cos(a),dz=Math.sin(a),px=-dz,pz=dx,r=between(0,.13),cx=x+dx*r,cz=z+dz*r;
-      const w=between(.018,.042),h=tuft*between(.68,1.18),midBend=h*between(.08,.15),tipBend=h*between(.34,.52),n=pos.length/3;
-      pos.push(
-        cx-px*w,y,cz-pz*w, cx+px*w,y,cz+pz*w,
-        cx+dx*midBend-px*w*.68,y+h*.54,cz+dz*midBend-pz*w*.68,
-        cx+dx*midBend+px*w*.68,y+h*.54,cz+dz*midBend+pz*w*.68,
-        cx+dx*tipBend,y+h,cz+dz*tipBend,
-      );
-      idx.push(n,n+1,n+3,n,n+3,n+2,n+2,n+3,n+4);
-      flex.push(0,0,.34,.34,1);
-      const base=new T.Color(palette[Math.floor(rng()*palette.length)]).multiplyScalar(between(.80,.98));
-      const middle=base.clone().multiplyScalar(between(1.03,1.12)),tip=middle.clone().lerp(new T.Color('#879461'),between(.08,.22));
-      cols.push(base.r,base.g,base.b,base.r,base.g,base.b,middle.r,middle.g,middle.b,middle.r,middle.g,middle.b,tip.r,tip.g,tip.b);
-    }
-  }
-  const blades=meshSurface(root,pos,idx,cols,{roughness:.93});
-  blades.name=`${zone.name} bent grass`;
-  blades.userData.grassZone=zone.name;
-  blades.geometry.setAttribute('bladeFlex',new T.Float32BufferAttribute(flex,1));
-  swayMaterial(blades.material,{strength:zone.name==='woodland'?.90:1.08,blade:true});
-  blades.customDepthMaterial=blades.material.userData.windDepth;
-  return blades;
-}
-
 export function grass(root) {
-  const meshes=grassZones.map(zone=>grassMesh(root,zone));
+  const meshes=grassZones.map(zone=>meadowMesh(root,zone,height,grassAllowed));
   return {meshes,stats:Object.freeze(Object.fromEntries(meshes.map(mesh=>[mesh.userData.grassZone,mesh.geometry.index.count/3])))};
 }
 export function bridge(b) {

@@ -1,7 +1,9 @@
+import {applyTurf} from './meadow.js';
+import {plantTree,ridgeTree} from './trees.js';
 import {soilMesh} from './soil.js';
 import * as T from 'three';
 import {Builder,meshSurface,range,tint,v,TAU,label} from './model.js';
-import {grassMap,height} from './land.js';
+import {grassAllowed,grassMap,height} from './land.js';
 import {lake,lakePoint,lakeRadius,dock,falls,alderInfluence,alderX,alderWidth,lipZ} from './lake-layout.js';
 import {buildAlderFalls} from './waterfall.js';
 
@@ -50,6 +52,7 @@ function groundPatch(root,x0,x1,z0,z1,mat){
           diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.76,.83,.87)*(.86+.2*grain),cover.y);
         }`);
   };
+  applyTurf(m,(x,z)=>grassAllowed(x,z,'lakeshore'));
   return soilMesh(m,'shore');
 }
 function lakeSurface(root,material){
@@ -78,7 +81,7 @@ function southernRidge(root,b){
     c.multiplyScalar(.92+.10*Math.cos(a*24+row*.65));cols.push(c.r,c.g,c.b);
     if(i&&row){const k=row*(count+1)+i;idx.push(k-count-2,k-1,k,k-count-2,k,k-count-1);}
     if(row>1&&y>2&&row<10&&i%3&&cover<.12){
-      const h=2+.9*Math.cos(i*3.4+row);b.put('pine',tint('#476451'),p.x,y+h*.39,p.z,h*.56,h,h*.56,0,a);
+      const h=2+.9*Math.cos(i*3.4+row);ridgeTree(b,p.x,y,p.z,h,a);
     }
   }
   meshSurface(root,pos,idx,cols,{roughness:1,flatShading:true});
@@ -121,13 +124,8 @@ export function buildLakeScenery(root,waterMaterial){
       (z>lipZ-3&&Math.abs(x-alderX(z-lipZ))<alderWidth(z-lipZ)+2.7))continue;
     const y=height(x,z),h=range(3.2,9.6);
     if(z>lipZ-5 && Math.hypot(height(x+.5,z)-height(x-.5,z),height(x,z+.5)-height(x,z-.5))>.72)continue;
-    b.put('cyl',tint('#655646'),x,y+h*.28,z,h*.05,h*.60,h*.05,0,0,0,'wood');
+    plantTree(b,i%4?'fir':'beech',x,y,z,h);
     trunks.push({x,z,r:h*.025+.17});
-    if(i%4){
-      for(let k=0;k<4;k++){const w=h*(.42-k*.071);b.put('pine',tint(['#375344','#456448','#4d6b52','#57745b'][k],.1),x,y+h*(.38+k*.16),z,w,h*(.52-k*.055),w,.025,i+k*.41,0,'canopy');}
-    }else{
-      for(let k=0;k<5;k++){const q=k*2.40+i;b.put('crown',tint(k%2?'#647b48':'#80905a'),x+Math.cos(q)*h*.14,y+h*(.67+.07*Math.sin(q)),z+Math.sin(q)*h*.14,h*.48,h*.39,h*.49,0,q,0,'canopy');}
-    }
   }
   for(let i=0;i<530;i++){
     const {x,z}=lakePoint(range(0,TAU),range(.85,1.065)),s=range(.09,.62);

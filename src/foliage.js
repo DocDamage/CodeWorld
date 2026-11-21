@@ -12,10 +12,10 @@ export function setFoliageWind(time,amplitude,windX=1,windZ=0){
   return {time:uniforms.leafTime.value,amplitude:uniforms.leafWind.value,x:windDirection.x,z:windDirection.y};
 }
 
-export function swayMaterial(material,{strength=1,blade=false,crown=false,cropRoot=null,partSize=null}={}) {
+export function swayMaterial(material,{strength=1,blade=false,crown=false,tree=false,flutter=false,cropRoot=null,partSize=null}={}) {
   material.userData.foliageStrength=strength;
   material.userData.foliageKind=blade?'grass':crown?'crown':'plant';
-  const flex=point=>blade?'bladeFlex':cropRoot!==null?`smoothstep(0.,1.65,${point}.y-cropRoot)`:'smoothstep(-.5,.5,position.y)';
+  const flex=point=>blade?'bladeFlex':tree?'smoothstep(.06,1.,position.y)':cropRoot!==null?`smoothstep(0.,1.65,${point}.y-cropRoot)`:'smoothstep(-.5,.5,position.y)';
   const development=cropRoot!==null?'(position+vec3(0.,.5,0.))*partSize-vec3(0.,.5,0.)':'position';
   const declaration=`uniform float leafTime,leafWind;uniform vec2 foliageWindDirection;uniform vec4 brushes[5];
     vec3 foliageMotion(vec3 leaf,float flex){
@@ -24,6 +24,7 @@ export function swayMaterial(material,{strength=1,blade=false,crown=false,cropRo
       float phase=dot(leaf.xz,direction*.34+across*.12);
       float wave=.67+.24*sin(leafTime*1.71-phase)+.09*sin(leafTime*3.37-phase*.47);
       vec3 motion=vec3(direction.x,0.,direction.y)*(.026+leafWind*wave*.48);
+      ${flutter?'motion.xz+=across*sin(leafTime*5.3+leaf.x*3.7+leaf.z*1.2)*leafWind*.047;':''}
       motion.xz+=across*sin(leafTime*1.13+phase*.73)*(.008+leafWind*.045);
       for(int i=0;i<5;i++){
         vec3 away=leaf-brushes[i].xyz;
@@ -66,7 +67,7 @@ export function swayMaterial(material,{strength=1,blade=false,crown=false,cropRo
       transformed+=foliageLocalMotion(foliageMotion(leaf,foliageVertexFlex),stem);
     `);
   };
-  const key=`foliage-${strength}-${blade}-${cropRoot!==null}`;
+  const key=`foliage-${strength}-${tree}-${flutter}-${blade}-${cropRoot!==null}`;
   material.onBeforeCompile=shader=>{
     apply(shader);
     if(cropRoot!==null){
