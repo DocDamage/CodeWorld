@@ -8,9 +8,9 @@ Play starts you on foot in the village. The tour takes you through all 61 stops.
 
 ## Watch the world tour
 
-[![A view across Briarwick village. Select to open the full tour video.](docs/media/tour-preview.jpg)](docs/media/briarwick-full-tour.mp4?raw=1)
+[![A view across Briarwick village. Select to watch the full tour video.](docs/media/tour-preview.jpg)](https://docdamage.github.io/CodeWorld/tour.html)
 
-**[Watch or download the full tour (MP4)](docs/media/briarwick-full-tour.mp4)** · 5 min 38 sec · 61 stops. The recording follows one complete loop at normal speed. Each view is labeled, and the MP4 contains seven chapters.
+**[Watch the recorded tour in your browser](https://docdamage.github.io/CodeWorld/tour.html)** · 5 min 38 sec · 61 stops. The recording follows one complete loop at normal speed. Each view is labeled, and the player lets you jump to any of the seven chapters.
 
 | Time | Places and activities |
 | --- | --- |

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Briarwick · Recorded world tour</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #18221e; color: #f3efe6; }
+    body { max-width: 64rem; margin: auto; padding: clamp(1rem, 3vw, 2.5rem); }
+    h1 { font: 2.2rem Georgia, serif; margin: 0 0 1rem; }
+    video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #101510; }
+    nav { display: flex; flex-wrap: wrap; gap: .6rem 1.25rem; margin: 1rem 0; }
+    nav[hidden] { display: none; }
+    a, button { color: #f1db9f; }
+    button { background: #23312a; border: 1px solid #657568; border-radius: .3rem; padding: .6rem .8rem; font: inherit; cursor: pointer; }
+    button:hover, button:focus-visible { background: #34483c; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Briarwick world tour</h1>
+    <video controls playsinline preload="metadata" width="1280" height="720" poster="docs/media/tour-preview.jpg" aria-label="Recorded tour of Briarwick">
+      <source src="docs/media/briarwick-full-tour.mp4" type="video/mp4">
+      <a href="docs/media/briarwick-full-tour.mp4">Open the MP4 recording</a>
+    </video>
+    <nav aria-label="Video chapters" id="chapters" hidden>
+      <button data-seconds="0">0:00 Village</button>
+      <button data-seconds="64">1:04 Farm</button>
+      <button data-seconds="115">1:55 Alder Lake</button>
+      <button data-seconds="149">2:29 Pinewood</button>
+      <button data-seconds="176">2:56 Castle</button>
+      <button data-seconds="267">4:27 Crypts</button>
+      <button data-seconds="306">5:06 Ore railway and forge</button>
+    </nav>
+    <nav aria-label="Play Briarwick">
+      <a href="./#play">Play Briarwick</a>
+      <a href="./#tour">Start the interactive tour</a>
+    </nav>
+  </main>
+  <script>
+    const video = document.querySelector('video');
+    const chapters = document.getElementById('chapters');
+    chapters.hidden = false;
+    for (const button of chapters.querySelectorAll('button')) {
+      button.addEventListener('click', () => {
+        video.currentTime = Number(button.dataset.seconds);
+        video.play().catch(() => video.focus());
+      });
+    }
+  </script>
+</body>
+</html>
