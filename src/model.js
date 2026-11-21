@@ -7,6 +7,7 @@ import {cropGeometry} from './crop-geometry.js';
 export const TAU = Math.PI * 2;
 export const v = (x,y,z) => new T.Vector3(x,y,z);
 let seed = 42121;
+export const proceduralSeed=()=>seed;
 export function random() { seed = (Math.imul(seed,1664525)+1013904223)>>>0; return seed/4294967296; }
 export const range = (a,b) => a+(b-a)*random();
 export const pick = a => a[Math.floor(random()*a.length)];
@@ -66,7 +67,9 @@ const unitY = v(0,1,0);
 export class Builder {
   constructor(root) {
     this.root=root;this.frame=new T.Matrix4();this.batches=new Map();
-    this.ownership={objectId:null,partId:null};
+    let owner=root;
+    while(owner&&!owner.userData?.objectId)owner=owner.parent;
+    this.ownership={objectId:owner?.userData.objectId??null,partId:null};
   }
   group(x,y,z,yaw,fn) {
     const old=this.frame;

@@ -40,7 +40,7 @@ test('buildFarm creates an instanced, animated farm with a stable integration AP
           fillRect() {}, fillText() {}, putImageData() {}, getImageData: () => ({ data: new Uint8ClampedArray(512 * 256 * 4) }),
           createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
           createLinearGradient: () => ({ addColorStop() {} }),
-          beginPath() {}, ellipse() {}, fill() {}, moveTo() {}, lineTo() {}, closePath() {},
+          beginPath() {}, ellipse() {}, fill() {}, stroke() {}, moveTo() {}, lineTo() {}, closePath() {},
         }),
       };
     },

@@ -23,6 +23,11 @@ export const plots = [
   {id:'herb',name:'Rosemary House',x:2.5,z:-21.8,y:4.52,a:.29,w:5.5,d:4.8,h:4.2,roof:'#5b6757',wall:'#bdb09a'}
 ];
 
+export const interiorLayouts=Object.freeze({
+  bakery:[5.7,5.20],mill:[6.2,5.75],inn:[6.3,5.65],slate:[5.65,5.17],
+  tower:[5.22,4.85],wind:[4.95,4.64],potter:[5.52,5.18],herb:[5.36,5.10]
+});
+
 export function doorOffset(plot) {
   if (plot.id === 'wind') return 0;
   return plot.w * (plot.id === 'mill' ? .25 : -.25);
@@ -106,13 +111,19 @@ function rebuildRoadSamples(){
 }
 rebuildRoadSamples();
 export const roadCacheRevision=()=>cacheRevision;
+export function proposedPlotPlacement(plot,placement){
+  if(!placement||typeof placement!=='object'||Array.isArray(placement))throw new TypeError('Expected a plot placement');
+  const next={};
+  for(const key of ['x','y','z','a']){
+    next[key]=placement[key]===undefined?plot[key]:placement[key];
+    if(!Number.isFinite(next[key]))throw new TypeError(`Invalid ${key} placement for ${plot.id}`);
+  }
+  return next;
+}
 export function updatePlotPlacement(id,placement){
   const plot=plots.find(candidate=>candidate.id===id);
   if(!plot)throw new Error(`Unknown village plot: ${id}`);
-  for(const key of ['x','y','z','a'])if(placement[key]!==undefined){
-    if(!Number.isFinite(placement[key]))throw new TypeError(`Invalid ${key} placement for ${id}`);
-    plot[key]=placement[key];
-  }
+  Object.assign(plot,proposedPlotPlacement(plot,placement));
   const prefix=approachPrefixes.get(id),road=roads.find(candidate=>candidate.destination===id);
   if(prefix&&road)road.curve=approach(id,prefix).curve;
   rebuildRoadSamples();

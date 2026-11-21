@@ -2,8 +2,10 @@ import * as T from 'three';
 import { Builder,v,TAU,tint,pick } from './model.js';
 import { wood, cupboard, plant, candle, volume, sleepingLoft, fitWorkshop, walnut, oak, honey, brass, iron, linen } from './furnishings.js';
 import { animateFires,placedFire } from './fire.js';
+import { stepSmoke } from './smoke.js';
+import { registerWorldObject,visualBindings,worldObjects } from './world-objects.js';
+import { interiorLayouts } from './layout.js';
 
-const sizes={bakery:[5.7,5.20],mill:[6.2,5.75],inn:[6.3,5.65],slate:[5.65,5.17],tower:[5.22,4.85],wind:[4.95,4.64],potter:[5.52,5.18],herb:[5.36,5.10]};
 const loft=2.85,steps=17;
 const schemes={
   bakery:['#cbb89a','#874c40','#70766a'],mill:['#9d978c','#65554b','#646259'],
@@ -57,7 +59,7 @@ function addWindow(room,b,x,y,z,yaw,side,accent){
   b.group(x,y,z,yaw,()=>{
     wood(b,0,0,0,1.57,1.53,.12,walnut);
     const m=new T.Mesh(new T.PlaneGeometry(1.35,1.30),new T.MeshBasicMaterial({color:0xffffff,toneMapped:false}));
-    m.position.z=.075;m.applyMatrix4(b.frame);room.scene.add(m);room.windows.push({mesh:m,side});
+    m.position.z=.075;m.applyMatrix4(b.frame);room.sections.structure.add(m);room.windows.push({mesh:m,side});
     wood(b,0,0,.095,.064,1.36,.055);wood(b,0,0,.095,1.41,.065,.055);wood(b,0,-.78,.05,1.78,.12,.29,honey);
   });
   swag(b,x,y,z,yaw,accent);
@@ -72,6 +74,7 @@ function ceilingLamp(b,x,top,z,drop){
   placedFire(b,x,bottom-.19,z,{width:.23,height:.33,intensity:0,embers:0});
 }
 function architecture(room,b,plot){
+  const sleepingB=room.builders['sleeping-loft'],workshopB=room.builders.workshop,lightingB=room.builders.lighting,furnishingB=room.builders.furnishings;
   const [plaster,accent,paint]=schemes[plot.id],round=plot.id==='wind';
   const {halfW,halfD,stairSide,landing,foot}=room.bounds;
   const w=halfW*2,d=halfD*2,eave=5.18,ridge=6.55;
@@ -136,49 +139,78 @@ function architecture(room,b,plot){
   framedPrint(b,-halfW+.15,1.78,-2.48,Math.PI/2,accent);
   framedPrint(b,halfW-.15,1.84,2.75,-Math.PI/2,accent);
   const loftBack=4.05-halfD;
-  b.group(0,loft,loftBack,0,()=>sleepingLoft(b,plot,accent));
+  sleepingB.owner(`room:${plot.id}`,`room:${plot.id}:sleeping-loft`,()=>sleepingB.group(0,loft,loftBack,0,()=>sleepingLoft(sleepingB,plot,accent)));
   room.block(-2.66,-2.50+loftBack,1.32,2.12,loft);room.block(-1.55,-3.32+loftBack,.72,.51,loft);
   if(plot.id==='inn')room.block(.12,-2.58+loftBack,1.32,2.12,loft);
   else room.block(plot.id==='tower'?.61:.24,-3.43+loftBack,plot.id==='tower'?1.65:1.25,.67,loft);
   room.block(2.05,-3.43+loftBack,.94,.64,loft);
   for(const x of [-3.12,1.88])room.block(x,landing,.14,.14);
-  room.forge=fitWorkshop(b,plot.id,room.block,room.bounds);
+  room.forge=workshopB.owner(`room:${plot.id}`,`room:${plot.id}:workshop`,()=>fitWorkshop(workshopB,plot.id,room.block,room.bounds));
   if(plot.id==='mill'){
     const x=-1.56,z=halfD-.64;
-    const pivot=new T.Group();pivot.position.set(x,.87,z);room.scene.add(pivot);const lever=new Builder(pivot);
+    const pivot=new T.Group();pivot.position.set(x,.87,z);room.sections.workshop.add(pivot);const lever=new Builder(pivot);
     lever.beam(iron,v(0,0,0),v(0,.73,0),.085);lever.put('ball',brass,0,.73,0,.18,.17,.16);lever.finish();
-    b.put('box','#5e5a4e',x,.37,z,.46,.75,.44,0,0,0,'stone');wood(b,x,.8,z,.51,.14,.48,walnut);
+    workshopB.put('box','#5e5a4e',x,.37,z,.46,.75,.44,0,0,0,'stone');wood(workshopB,x,.8,z,.51,.14,.48,walnut);
     room.block(x,z,.50,.49);room.sluice={x,z};
     room.scene.userData.motion.push((t,h,drive)=>pivot.rotation.z=-.67+(drive?.gate??1)*1.3);
   }
   // A small writing nook and pegs beside the door make the front half usable too.
-  b.group(-2.72,0,halfD-.45,Math.PI,()=>{cupboard(b,0,0,1.72,.63,.73,paint);plant(b,-.53,.80,0,.50,true);volume(b,.21,.80,0,.18);candle(b,.60,.80,-.07);});
+  furnishingB.owner(`room:${plot.id}`,`room:${plot.id}:furnishings`,()=>furnishingB.group(-2.72,0,halfD-.45,Math.PI,()=>{cupboard(furnishingB,0,0,1.72,.63,.73,paint);plant(furnishingB,-.53,.80,0,.50,true);volume(furnishingB,.21,.80,0,.18);candle(furnishingB,.60,.80,-.07);}));
   room.block(-2.72,halfD-.45,1.77,.66);
-  b.group(1.40,0,halfD-.15,Math.PI,()=>{wood(b,0,1.71,0,1.17,.14,.11,honey);
-    for(let j=-1;j<=1;j++)b.put('ball',brass,j*.39,1.71,.11,.093,.09,.15);
-    b.put('box',accent,-.38,1.19,.13,.31,.92,.11,0,0,-.06);});
-  ceilingLamp(b,-.52,5.02,1.73,1.80);ceilingLamp(b,1.16,loft-.15,-2.04,.38);
-  if(plot.id!=='mill')rug(room.scene,.62,0,.72,2.02,3.72,accent);
-  rug(room.scene,.24,loft,-2.03+loftBack,1.87,1.10,paint);
+  furnishingB.owner(`room:${plot.id}`,`room:${plot.id}:furnishings`,()=>furnishingB.group(1.40,0,halfD-.15,Math.PI,()=>{wood(furnishingB,0,1.71,0,1.17,.14,.11,honey);
+    for(let j=-1;j<=1;j++)furnishingB.put('ball',brass,j*.39,1.71,.11,.093,.09,.15);
+    furnishingB.put('box',accent,-.38,1.19,.13,.31,.92,.11,0,0,-.06);}));
+  lightingB.owner(`room:${plot.id}`,`room:${plot.id}:lighting`,()=>{ceilingLamp(lightingB,-.52,5.02,1.73,1.80);ceilingLamp(lightingB,1.16,loft-.15,-2.04,.38);});
+  if(plot.id!=='mill')rug(room.sections.furnishings,.62,0,.72,2.02,3.72,accent);
+  rug(room.sections['sleeping-loft'],.24,loft,-2.03+loftBack,1.87,1.10,paint);
   return room;
 }
 
 export function makeRoom(plot){
   const scene=new T.Scene();scene.background=new T.Color('#625444');
-  const [halfW,halfD]=sizes[plot.id],stairSide=halfW-1.62,landing=4.05-halfD-.9,foot=landing+3.81;
+  const roomId=`room:${plot.id}`;scene.name=roomId;scene.userData.objectId=roomId;
+  const [halfW,halfD]=interiorLayouts[plot.id],stairSide=halfW-1.62,landing=4.05-halfD-.9,foot=landing+3.81;
   const obstacles=[],windows=[];
   const block=(x,z,w,d,y=0)=>obstacles.push({x,z,w,d,y});
   const motion=[];scene.userData.motion=motion;
-  const room={scene,windows,block,plot,bounds:{halfW,halfD,stairSide,landing,foot},entryZ:halfD-.52,
-    animate(time,hour,drive){animateFires(scene,time);for(const update of motion)update(time,hour,drive);}};
-  const b=new Builder(scene);architecture(room,b,plot);b.finish();
+  const sections={};
+  for(const name of ['structure','furnishings','workshop','sleeping-loft','lighting']){
+    const group=new T.Group();group.name=`${roomId}:${name}`;group.userData={objectId:`${roomId}:${name}`,ownerId:roomId};scene.add(group);sections[name]=group;
+  }
+  for(const group of Object.values(sections))group.userData.motion=motion;
+  const addAnchor=(name,x,y,z)=>{const node=new T.Group();node.name=`anchor:${roomId}:${name}`;node.position.set(x,y,z);node.userData={objectId:roomId,anchor:name};scene.add(node);return node;};
+  const room={scene,sections,windows,block,plot,bounds:{halfW,halfD,stairSide,landing,foot},entryZ:halfD-.52,
+    animate(time,hour,drive){for(const root of [scene,...Object.values(sections)])animateFires(root,time);for(const update of motion)update(time,hour,drive);},
+    stepSmoke(dt,time,eye,viewport,night){for(const root of [scene,...Object.values(sections)])stepSmoke(root,dt,time,0,eye,viewport,night);}};
+  const builders=Object.fromEntries(Object.entries(sections).map(([name,group])=>[name,new Builder(group)]));room.builders=builders;
+  const assetKey=`procedural:interior/${plot.id}`;
+  const defaultBinding={kind:'procedural',build:({room:target,plot:targetPlot,builder})=>architecture(target,builder,targetPlot)};
+  if(!visualBindings.has(assetKey))visualBindings.register(assetKey,defaultBinding);
+  builders.structure.owner(roomId,`${roomId}:structure`,()=>visualBindings.get(assetKey).build({room,plot,builder:builders.structure,builders}));
+  for(const builder of Object.values(builders))builder.finish();
+  const workshop=room.forge?.anvil??{x:0,z:-halfD+.8};
+  addAnchor('entrance',0,0,room.entryZ);addAnchor('workshop',workshop.x,0,workshop.z);
+  if(room.sluice)addAnchor('sluice',room.sluice.x,0,room.sluice.z);
+  const childIds=['structure','furnishings','workshop','sleeping-loft','lighting'].map(name=>`${roomId}:${name}`);
+  registerWorldObject({
+    id:roomId,type:'interior',gameplayRole:'building-interior',name:`${plot.name} interior`,parentId:plot.id,regionId:'region:village',
+    transform:{position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},transformSpace:'interior-local',visual:{assetKey,binding:'procedural'},
+    collision:{shape:'interior-bounds',width:halfW*2,depth:halfD*2},anchors:{entrance:{position:[0,0,room.entryZ],forward:[0,0,-1]},workshop:{position:[workshop.x,0,workshop.z]}},
+    relationships:{exteriorId:plot.id,children:childIds},generation:{builder:'village-room',layout:{halfW,halfD,stairSide,landing,foot}}
+  });
+  for(const name of ['structure','furnishings','workshop','sleeping-loft','lighting'])registerWorldObject({
+    id:`${roomId}:${name}`,type:'interior-section',gameplayRole:name,parentId:roomId,regionId:'region:village',transform:{position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},transformSpace:'interior-local',
+    visual:{assetKey:`procedural:interior/${plot.id}/${name}`,binding:'live-scene'},anchors:{},collision:null,relationships:{children:[]},generation:{builder:name}
+  });
+  worldObjects.bindGroup(roomId,scene);
+  for(const name of ['structure','furnishings','workshop','sleeping-loft','lighting'])worldObjects.bindGroup(`${roomId}:${name}`,sections[name]);
   const ambient=new T.HemisphereLight('#d8d2c1','#77685a',1.2);
   const glow=new T.PointLight('#ffdaa6',16,15,2);glow.position.set(-.52,3.20,1.73);
   const under=new T.PointLight('#ffe4ba',9,11,2);under.position.set(.60,1.98,-2.24);
   const sun=new T.SpotLight('#fff0cb',65,20,1.13,.7,1.4);
   sun.position.set(-3.95,3.12,2.27);sun.target.position.set(.3,0,-.85);
   sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.bias=-.0006;sun.shadow.normalBias=.012;sun.shadow.camera.near=.15;
-  scene.add(ambient,glow,under,sun,sun.target);
+  sections.lighting.add(ambient,glow,under,sun,sun.target);
   room.light=(night,cloud,flash)=>{ambient.intensity=1.32-night*.57-cloud*.24+flash*.42;glow.intensity=14+night*4;sun.intensity=(41-night*35)*(1-cloud*.59)+flash*20;under.intensity=8+night*3;};
   room.nextFloor=(x,z,previous)=>{
     if(Math.abs(x)>halfW-.28||Math.abs(z)>halfD-.29)return null;

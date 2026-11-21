@@ -1,4 +1,5 @@
 import {applyTurf} from './meadow.js';
+import {actionIds} from './actions.js';
 import {plantShrub,plantTree} from './trees.js';
 import {soilMesh} from './soil.js';
 import {swayMaterial} from './foliage.js';
@@ -496,9 +497,9 @@ export function buildFarm(scene, leafSources, saved, hasBronzeSickle, plantTrack
     surfaceLift(x,z){return fieldAt(x,z)?.level===undefined?0:Math.abs(x+86)<.42?.042:.074;},
     nearbyTask(x,z,yaw){
       if(vehicle.mounted)return worksites.driverAction();
-      if(vehicle.nearTractor(x,z))return {label:'Drive the tractor',perform:()=>{vehicle.mount();return 'Drive with movement controls. Use the plow on bare ground.';}};
+      if(vehicle.nearTractor(x,z))return {id:actionIds.farm.tractorMount,objectId:'farm:tractor',label:'Drive the tractor',perform:()=>{vehicle.mount();return 'Drive with movement controls. Use the plow on bare ground.';}};
       const action=dairy.action(x,z);
-      if(action)return {label:action,perform:()=>dairy.use(x,z)};
+      if(action)return {id:actionIds.farm.dairyUse,objectId:'farm:operations',label:action,perform:()=>dairy.use(x,z)};
       return worksites.stationAction(x,z)??worksites.fieldAction(x,z,yaw);
     },
     description:worksites.description,

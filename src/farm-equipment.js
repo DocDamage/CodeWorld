@@ -124,6 +124,7 @@ export function buildFarmEquipment(root){
   }
   updateModels(0,0);
   return {
+    roots:{tractor:tractorGroup,wagon:wagonGroup},
     get mounted(){return mounted;},get plowing(){return plowing;},get hitched(){return hitched;},
     get pose(){return pose;},get wagon(){return wagon;},
     nearTractor(x,z){return Math.hypot(x-pose.x,z-pose.z)<2.20;},

@@ -73,7 +73,7 @@ export function buildBoatModel(root){
     const o=new Builder(pivot);o.beam('#ab8357',v(-side*.58,.10,0),v(side*1.34,-.10,0),.055,.055,'cyl','wood');
     o.put('ball','#b68a56',side*1.42,-.11,0,.62,.068,.19,0,0,0,'wood');o.finish();
   }
-  return (boat,t)=>{
+  const draw=(boat,t)=>{
     hull.position.set(boat.x,.026*Math.sin(t*1.6+boat.z),boat.z);
     hull.rotation.set(.012*Math.sin(t*.93),boat.yaw,boat.heel+.014*Math.sin(t*1.37),'YXZ');
     rig.visible=jib.visible=boat.mode==='sail';
@@ -81,4 +81,5 @@ export function buildBoatModel(root){
     vane.rotation.y=boat.windAngle+.09*Math.sin(t*7.1);
     oars.forEach((o,i)=>{const s=i?1:-1;o.visible=boat.mode==='oars';o.rotation.y=s*(boat.rowing?Math.cos(boat.stroke)*.68:.12);o.rotation.z=s*(boat.rowing?-.14-.22*Math.sin(boat.stroke):.09);});
   };
+  draw.root=hull;return draw;
 }

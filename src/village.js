@@ -4,6 +4,7 @@ import { height,inPlot,nearPath,riverX,riverWidth } from './land.js';
 import { localToWorld,plots } from './layout.js';
 import { oak,walnut,iron,honey,wood,table,vessel,plant,volume } from './furnishings.js';
 import { placedFire } from './fire.js';
+import { linkWorldObject,registerWorldObject,worldObjects } from './world-objects.js';
 
 const clothMaterial=new T.MeshStandardMaterial({color:'#c0ae92',side:T.DoubleSide,roughness:.96});
 
@@ -79,20 +80,33 @@ export function dressVillage(root,b){
   const mill=plots.find(p=>p.id==='mill');
   const sluice=localToWorld(mill,-.62,mill.d/2+.96);
   const sluiceY=height(sluice.x,sluice.z);
-  const lever=new T.Group();lever.position.set(sluice.x,sluiceY+.80,sluice.z);lever.rotation.y=mill.a;root.add(lever);
-  const handle=new T.Group();lever.add(handle);const leverB=new Builder(handle);
-  leverB.beam(iron,v(0,0,0),v(0,.74,0),.076,.074,'cyl');leverB.put('ball','#a78254',0,.74,0,.19,.16,.17);leverB.finish();
-  b.group(sluice.x,sluiceY,sluice.z,mill.a,()=>{
+  registerWorldObject({id:'mill:sluice',type:'interactive-prop',gameplayRole:'sluice',name:'Armory sluice',parentId:'mill',regionId:'region:village',
+    transform:{position:[sluice.x,sluiceY,sluice.z],rotation:[0,mill.a,0],scale:[1,1,1]},transformSpace:'world',visual:{assetKey:'procedural:village/sluice',binding:'live-scene'},
+    collision:{shape:'circle',radius:.31},anchors:{handle:{position:[0,.8,0]}},relationships:{children:['mill:sluice:handle']},generation:{builder:'sluice'}});
+  linkWorldObject('mill','mill:sluice');
+  const lever=new T.Group();lever.name='world:mill:sluice';lever.position.set(sluice.x,sluiceY,sluice.z);lever.rotation.y=mill.a;root.add(lever);worldObjects.bindGroup('mill:sluice',lever);
+  const handle=new T.Group();handle.position.y=.80;lever.add(handle);const leverB=new Builder(handle);
+  handle.name='part:mill:sluice:handle';handle.userData={objectId:'mill:sluice',partId:'mill:sluice:handle'};
+  leverB.owner('mill:sluice','mill:sluice:handle',()=>{leverB.beam(iron,v(0,0,0),v(0,.74,0),.076,.074,'cyl');leverB.put('ball','#a78254',0,.74,0,.19,.16,.17);});leverB.finish();
+  b.owner('mill:sluice','mill:sluice:base',()=>b.group(sluice.x,sluiceY,sluice.z,mill.a,()=>{
     b.put('box','#5f5d52',0,.34,0,.5,.69,.51,0,0,0,'stone');
     b.put('box',walnut,0,.76,0,.51,.24,.52);
     label(root,b,'SLUICE','#d2bc8c',0,.75,.273,.38,.13);
-  });
+  }));
   blocks.push({x:sluice.x,z:sluice.z,r:.31});
 
-  function yard(p,x,z,angle,r,build){
+  function yard(p,x,z,angle,r,build,identity=null){
     const at=localToWorld(p,x,z);
     if(nearPath(at.x,at.z,r*.68)||inPlot(at.x,at.z,r*.68)||Math.abs(at.x-riverX(at.z))<riverWidth(at.z)+r*.66)return;
-    b.group(at.x,height(at.x,at.z),at.z,p.a+angle,build);
+    const y=height(at.x,at.z);
+    if(identity){
+      const parentId=identity.parentId??p.id??'region:village';
+      registerWorldObject({id:identity.id,type:identity.type??'prop',gameplayRole:identity.role??identity.id.split(':').at(-1),name:identity.name??identity.id,parentId,regionId:'region:village',
+        transform:{position:[at.x,y,at.z],rotation:[0,p.a+angle,0],scale:[1,1,1]},transformSpace:'world',visual:{assetKey:`procedural:village/${identity.id}`,binding:'spatial-reference'},
+        collision:r>.34?{shape:'circle',radius:r}:null,anchors:identity.anchors??{},relationships:{children:[]},generation:{builder:identity.role??'yard-prop'}});
+      linkWorldObject(parentId,identity.id);
+      b.owner(identity.id,`${identity.id}:visual`,()=>b.group(at.x,y,at.z,p.a+angle,build));
+    }else b.group(at.x,y,at.z,p.a+angle,build);
     if(r>.34)blocks.push({...at,r});
   }
 
@@ -100,7 +114,7 @@ export function dressVillage(root,b){
     const w=plot.w/2,d=plot.d/2;
     switch(plot.id){
       case 'bakery':
-        yard(plot,w+2.2,d+.8,.7,1.17,()=>cart(b,()=>{crate(b,0,-.48,.67);cask(b,0,.34,.76);}));
+        yard(plot,w+2.2,d+.8,.7,1.17,()=>cart(b,()=>{crate(b,0,-.48,.67);cask(b,0,.34,.76);}),{id:'bakery:delivery-cart',role:'delivery-cart',name:'Bakery delivery cart'});
         yard(plot,w+1.65,-.5,-.3,.82,()=>{table(b,0,0,1.46,.62);for(let i=0;i<5;i++)b.put('ball',tint('#ac7749'),(i-2)*.24,.94,Math.sin(i)*.15,.23,.14,.32,0,i);});
         yard(plot,-.2,-d-1.47,0,.90,()=>logs(b,0,0));
         break;
@@ -125,7 +139,7 @@ export function dressVillage(root,b){
         yard(plot,w+1.56,d+.07,-.38,.8,()=>{crate(b,-.44,0,.66);table(b,.31,0,.77,.64);for(let i=0;i<4;i++)b.put('ring',iron,.11+i*.13,.91,0,.37,.37,1.08,Math.PI/2);});
         break;
       case 'wind':
-        yard(plot,-w-1.55,d+1.45,.42,1.22,()=>cart(b,()=>{for(let i=0;i<3;i++)b.put('barrel',tint('#b4a17c'),Math.sin(i*8)*.25,.31,(i-1)*.44,.54,.65,.51);}));
+        yard(plot,-w-1.55,d+1.45,.42,1.22,()=>cart(b,()=>{for(let i=0;i<3;i++)b.put('barrel',tint('#b4a17c'),Math.sin(i*8)*.25,.31,(i-1)*.44,.54,.65,.51);}),{id:'wind:grain-cart',role:'grain-cart',name:'Windmill grain cart'});
         yard(plot,w+1.14,-.55,-.2,.61,()=>{crate(b,-.33,0,.56);cask(b,.38,.04,.80);});
         break;
       case 'potter':
@@ -147,9 +161,9 @@ export function dressVillage(root,b){
     b.put('ring','#929085',0,1.05,0,1.49,1.49,3.3,Math.PI/2);
     for(const x of [-.79,.79])wood(b,x,1.37,0,.12,2.73,.14,walnut);
     wood(b,0,2.69,0,1.80,.14,.18,walnut);b.beam('#665243',v(.15,2.66,0),v(.15,1.52,0),.028,.027);vessel(b,.15,1.30,0,.33,'#82674c');
-  });
-  yard({x:22.1,z:12.1,a:0},0,0,0,.69,()=>campfire(b));
-  yard({x:-33.8,z:15.2,a:0},0,0,0,.66,()=>campfire(b));
+  },{id:'village:well',role:'well',name:'Village well',parentId:'region:village',anchors:{bucket:{position:[.15,1.3,0]}}});
+  yard({x:22.1,z:12.1,a:0},0,0,0,.69,()=>campfire(b),{id:'village:campfire:east',role:'campfire',name:'East village campfire',parentId:'region:village'});
+  yard({x:-33.8,z:15.2,a:0},0,0,0,.66,()=>campfire(b),{id:'village:campfire:west',role:'campfire',name:'West village campfire',parentId:'region:village'});
 
   return {
     walkable:(x,z)=>!blocks.some(p=>(x-p.x)**2+(z-p.z)**2<(p.r+.20)**2),

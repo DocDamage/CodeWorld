@@ -1,5 +1,5 @@
 import * as T from 'three';
-import { Builder,v,TAU,tint,range,random,pick,label } from './model.js';
+import { Builder,v,TAU,tint,range,random,pick,label,proceduralSeed } from './model.js';
 import { plots,height,doorOffset } from './land.js';
 
 const timber='#544439',oak='#805a3c',trim='#655040',cream='#e7d4aa',iron='#383f39';
@@ -209,8 +209,9 @@ function roundRoof(b,base,radius,rise,color,rows) {
     }
   }
 }
-function clocktower(b,root) {
+function clocktower(b,root,ownerId='tower') {
   const r=1.24,h=7.7;
+  const clockAssembly=new T.Group();clockAssembly.name='world:tower:clock';clockAssembly.userData={objectId:'tower:clock',ownerId};root.add(clockAssembly);worldObjects.bindGroup('tower:clock',clockAssembly);
   b.put('cyl','#d9c8a6',0,h/2,0,r*2,h,r*2,0,0,0,'plaster');towerStone(b,r,h);
   for(const y of [.28,5.75,7.28,7.58])b.put('disk','#b3a382',0,y,0,2.64,.17,2.64);
   for(let k=0;k<4;k++)b.group(0,0,0,k*Math.PI/2,()=>{
@@ -218,8 +219,8 @@ function clocktower(b,root) {
     b.put('disk',trim,0,6.55,r-.03,1.29,.17,1.29,Math.PI/2);
     b.put('disk','#f2db9e',0,6.55,r+.075,1.12,.04,1.12,Math.PI/2);
     for(let j=0;j<12;j++){const a=j*TAU/12;b.put('box',trim,.46*Math.sin(a),6.55+.46*Math.cos(a),r+.11,.036,.105,.025,0,0,-a);}
-    const mount=new T.Group();mount.matrixAutoUpdate=false;
-    mount.matrix.copy(b.frame).multiply(new T.Matrix4().makeTranslation(0,6.55,r+.15));root.add(mount);
+    const mount=new T.Group();mount.name=`part:${ownerId}:clock-face:${k}`;mount.userData={objectId:'tower:clock',partId:`${ownerId}:clock-hands`};mount.matrixAutoUpdate=false;
+    mount.matrix.copy(b.frame).multiply(new T.Matrix4().makeTranslation(0,6.55,r+.15));clockAssembly.add(mount);
     for(const [kind,len,width] of [['hour',.3,.055],['minute',.42,.036]]){
       const hand=new T.Group();mount.add(hand);const hb=new Builder(hand);
       hb.put('box',iron,0,len*.42,kind==='minute'?.014:0,width,len,.025);hb.finish();clockHands.push({hand,kind});
@@ -240,10 +241,10 @@ function windmill(b) {
   b.put('cyl',trim,0,5.92,0,3.37,.24,3.37);
   roundRoof(b,6.02,1.87,2.39,'#b76046',8);
 }
-function rotor(root,b,x,y,z,axis,construct,speed) {
-  const mount=new T.Group();mount.matrixAutoUpdate=false;mount.matrix.copy(b.frame).multiply(new T.Matrix4().makeTranslation(x,y,z));root.add(mount);
-  const hub=new T.Group();mount.add(hub);const mb=new Builder(hub);construct(mb);mb.finish();
-  moving.push({hub,axis,speed});return hub;
+function rotor(root,b,x,y,z,axis,construct,speed,ownerId='wind',partId='wind:rotor') {
+  const mount=new T.Group();mount.name=`part:${partId}`;mount.userData={objectId:ownerId,partId};mount.matrixAutoUpdate=false;mount.matrix.copy(b.frame).multiply(new T.Matrix4().makeTranslation(x,y,z));root.add(mount);
+  const hub=new T.Group();mount.add(hub);const mb=new Builder(hub);mb.owner(ownerId,`${partId}:sails`,()=>construct(mb));mb.finish();
+  moving.push({hub,axis,speed});return {mount,hub};
 }
 function sails(b){
   b.put('cyl',trim,0,0,0,.44,.46,.44,Math.PI/2);
@@ -264,22 +265,33 @@ export function lantern(b,x,y,z) {
     lamps.push(v(.44,2.43,0).applyMatrix4(b.frame));
   });
 }
+const villageBuildingBinding={kind:'procedural',build:({builder,plot,root:visualRoot})=>{
+  if(plot.id==='wind'){
+    windmill(builder);const movingRotor=rotor(visualRoot,builder,0,5.8,1.8,'z',sails,.23,'wind:rotor','wind:rotor');worldObjects.bindGroup('wind:rotor',movingRotor.mount);
+  }
+  else cottage(builder,plot,visualRoot);
+  if(plot.id==='tower')builder.group(-2,0,.64,0,()=>clocktower(builder,visualRoot,plot.id));
+}};
+
+function anchor(group,plot,name,x,y,z,forwardZ=1){
+  const node=new T.Group();node.name=`anchor:${plot.id}:${name}`;node.position.set(x,y,z);
+  node.userData={objectId:plot.id,anchor:name,forward:[0,0,forwardZ]};group.add(node);return node;
+}
+
 export function buildings(root,b) {
-  if(!visualBindings.has('procedural:village/bakery'))visualBindings.register('procedural:village/bakery',{
-    kind:'procedural',build:({builder,plot,root:visualRoot})=>cottage(builder,plot,visualRoot)
-  });
-  for(const p of plots)b.group(p.x,p.y,p.z,p.a,()=>{
-    if(p.id==='bakery'){
-      const group=new T.Group();group.name='world:bakery';group.position.set(p.x,p.y,p.z);group.rotation.y=p.a;
-      group.userData.assetKey='procedural:village/bakery';root.add(group);worldObjects.bindGroup('bakery',group);
-      const bakeryBuilder=new Builder(group),binding=visualBindings.get(group.userData.assetKey);
-      bakeryBuilder.owner('bakery','bakery:exterior',()=>binding.build({builder:bakeryBuilder,plot:p,root:group}));
-      bakeryBuilder.finish();
-      return;
-    }
-    if(p.id==='wind'){windmill(b);rotor(root,b,0,5.8,1.8,'z',sails,.23);}
-    else cottage(b,p,root);
-    if(p.id==='tower')b.group(-2,0,.64,0,()=>clocktower(b,root));
-  });
+  for(const p of plots){
+    const assetKey=`procedural:village/${p.id}`;
+    if(!visualBindings.has(assetKey))visualBindings.register(assetKey,villageBuildingBinding);
+    const group=new T.Group();group.name=`world:${p.id}`;group.position.set(p.x,p.y,p.z);group.rotation.y=p.a;
+    group.userData.assetKey=assetKey;root.add(group);worldObjects.bindGroup(p.id,group);
+    const entranceZ=p.id==='wind'?1.91:p.d/2+.24,buildingBuilder=new Builder(group);
+    anchor(group,p,'ground',0,0,0);anchor(group,p,'entrance',doorOffset(p),0,entranceZ);anchor(group,p,'arrival',doorOffset(p),0,entranceZ+.36,-1);
+    anchor(group,p,'delivery',p.w*.38,0,entranceZ+1.05,-1);
+    const record=worldObjects.get(p.id);
+    record.generation.random={algorithm:'lcg32-1664525-1013904223',initialState:proceduralSeed()};
+    worldObjects.upsert(record);
+    buildingBuilder.owner(p.id,`${p.id}:exterior`,()=>visualBindings.get(assetKey).build({builder:buildingBuilder,plot:p,root:group}));
+    buildingBuilder.finish();
+  }
   for(const [x,z] of [[1.45,13],[-6,5.6],[-16.7,5.3],[3.65,-3.5],[9.1,-10.1],[-21.6,-6.3],[3.4,-14.9],[14,6.8],[-23.1,8.6],[7.7,22.8]])lantern(b,x,height(x,z),z);
 }

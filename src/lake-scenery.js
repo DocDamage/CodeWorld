@@ -64,7 +64,7 @@ function lakeSurface(root,material){
   }
   const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('waterBed',new T.Float32BufferAttribute(bed,3));g.setIndex(idx);
   g.setAttribute('lakeClarity',new T.BufferAttribute(new Float32Array(pos.length/3).fill(1),1));
-  const water=new T.Mesh(g,material);root.add(water);
+  const water=new T.Mesh(g,material);water.name='world:lake:water';water.userData.objectId='lake:water';root.add(water);return water;
 }
 function southernRidge(root,b){
   // Fold two wooded ridges around the far shore. Taper their ends into the valley.
@@ -115,8 +115,10 @@ export function buildLakeScenery(root,waterMaterial){
   const b=new Builder(root),map=grassMap();
   // The east woodland already supplies the portion east of x=54.25 up to z=102.64.
   const shores=[groundPatch(root,-35,54.25,54.25,lipZ+80,map),groundPatch(root,54.25,96,102.64,lipZ+80,map)];
-  southernRidge(root,b);approach(root,b);lakeSurface(root,waterMaterial);
-  buildAlderFalls(root,b,waterMaterial);
+  southernRidge(root,b);approach(root,b);const water=lakeSurface(root,waterMaterial);
+  const fallsRoot=new T.Group();fallsRoot.name='world:lake:falls';fallsRoot.userData.objectId='lake:falls';root.add(fallsRoot);
+  const fallsBuilder=new Builder(fallsRoot);
+  fallsBuilder.owner('lake:falls','lake:falls:scenery',()=>buildAlderFalls(fallsRoot,fallsBuilder,waterMaterial));fallsBuilder.finish();
   const trunks=[];
   for(let i=0;i<245;i++){
     const a=range(0,TAU),r=range(1.09,1.49),{x,z}=lakePoint(a,r);
@@ -132,18 +134,23 @@ export function buildLakeScenery(root,waterMaterial){
     b.put('stone',tint(i%3?'#86877b':'#a0977c'),x,height(x,z)+s*.12,z,s*1.28,s*.58,s,.16,range(0,TAU),.07,'stone');
   }
   const len=dock.end-dock.near;
-  for(let i=0;i<36;i++){
-    const z=dock.near+(i+.5)*len/36;
-    b.put('box',tint(i%3?'#948166':'#807059',.07),dock.x,dock.deck-.07,z,dock.width,.14,len/36-.015,0,0,0,'agedWood');
-  }
-  for(const x of [dock.x-.78,dock.x+.78]){
-    b.put('box','#615540',x,dock.deck-.22,dock.near+len/2,.14,.20,len,0,0,0,'wood');
-    for(let j=0;j<5;j++){const z=dock.near+.20+j*(len-.40)/4;
-      b.put('cyl',tint('#67563e'),x,-.23,z,.18,2.37,.18,0,j,0,'agedWood');
-      b.put('ring','#afa281',x,.83,z,.20,.20,.20,Math.PI/2);
+  const dockRoot=new T.Group();dockRoot.name='world:lake:dock';dockRoot.userData.objectId='lake:dock';
+  dockRoot.position.set(dock.x,dock.deck,dock.near);root.add(dockRoot);
+  const dockBuilder=new Builder(dockRoot);
+  dockBuilder.owner('lake:dock','lake:dock:structure',()=>{
+    for(let i=0;i<36;i++){
+      const z=(i+.5)*len/36;
+      dockBuilder.put('box',tint(i%3?'#948166':'#807059',.07),0,-.07,z,dock.width,.14,len/36-.015,0,0,0,'agedWood');
     }
-  }
-  b.finish();
-  return {shores,clear(x,z){return !trunks.some(tree=>(tree.x-x)**2+(tree.z-z)**2<tree.r**2)&&
+    for(const x of [-.78,.78]){
+      dockBuilder.put('box','#615540',x,-.22,len/2,.14,.20,len,0,0,0,'wood');
+      for(let j=0;j<5;j++){const z=.20+j*(len-.40)/4;
+        dockBuilder.put('cyl',tint('#67563e'),x,-.23-dock.deck,z,.18,2.37,.18,0,j,0,'agedWood');
+        dockBuilder.put('ring','#afa281',x,.83-dock.deck,z,.20,.20,.20,Math.PI/2);
+      }
+    }
+  });
+  dockBuilder.finish();b.finish();
+  return {shores,objectRoots:{water,dock:dockRoot,falls:fallsRoot},clear(x,z){return !trunks.some(tree=>(tree.x-x)**2+(tree.z-z)**2<tree.r**2)&&
     !(Math.abs(x-falls.x)<13&&z>falls.z+.5&&z<falls.z+7.5);}};
 }

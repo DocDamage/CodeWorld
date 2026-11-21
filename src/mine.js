@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {actionIds} from './actions.js';
 import {Builder,label,tint,v} from './model.js';
 import {
   MINE,MINE_ROUTE_LENGTH,MINE_PORTAL_PROGRESS,mineAt,mineFloor,mineLayer,mineLocation,mineNearby,
@@ -43,18 +44,17 @@ function trackAndTunnel(root,from,to){
 }
 
 function portal(root,point,title,yaw=0){
-  const b=new Builder(root);
-  b.group(point.x,point.y,point.z,yaw,()=>{
-    for(const side of [-1,1]){
-      b.put('stone','#777168',side*1.62,1.36,0,.72,2.72,.86,0,0,side*.035,'masonry');
-      b.put('box','#3f3329',side*1.23,1.35,-.06,.20,2.70,.24,0,0,0,'agedWood');
-    }
-    b.put('stone','#716b64',0,2.73,0,3.92,.65,.92,0,0,0,'masonry');
-    b.put('box','#3f3329',0,2.56,-.06,2.66,.21,.24,0,0,0,'agedWood');
-    b.put('box','#47372b',0,2.96,.39,3.42,.44,.13,0,0,0,'agedWood');
-    label(root,b,title,'#ead7a6',0,2.96,.48,3.15,.38);
-  });
-  b.finish();
+  const group=new T.Group();group.position.set(point.x,point.y,point.z);group.rotation.y=yaw;root.add(group);
+  const b=new Builder(group);
+  for(const side of [-1,1]){
+    b.put('stone','#777168',side*1.62,1.36,0,.72,2.72,.86,0,0,side*.035,'masonry');
+    b.put('box','#3f3329',side*1.23,1.35,-.06,.20,2.70,.24,0,0,0,'agedWood');
+  }
+  b.put('stone','#716b64',0,2.73,0,3.92,.65,.92,0,0,0,'masonry');
+  b.put('box','#3f3329',0,2.56,-.06,2.66,.21,.24,0,0,0,'agedWood');
+  b.put('box','#47372b',0,2.96,.39,3.42,.44,.13,0,0,0,'agedWood');
+  label(group,b,title,'#ead7a6',0,2.96,.48,3.15,.38);
+  b.finish();return group;
 }
 
 const oreColors={iron:'#8e7160',copper:'#b66c43',tin:'#9ba2a0',silver:'#c3c7c1'};
@@ -97,21 +97,22 @@ function buildYard(scene,oreMaterials){
   b.put('box','#55504a',a.x,(a.y+c.y)/2-.10,mid,2.18,.20,length+.16,tilt,0,0,'masonry');
   for(const x of [-.63,.63])b.beam(rail,v(a.x+x,a.y+.08,a.z),v(c.x+x,c.y+.08,c.z),.075,.075,'box','iron');
   for(let z=a.z+.18;z<c.z+.1;z+=.66)b.put('box',timber,a.x,a.y+(c.y-a.y)*(z-a.z)/length,z,1.78,.13,.22,tilt,0,0,'agedWood');
-  portal(root,MINE.portal,'BRIARWICK MINE',0);
-  b.group(MINE.yard.x,MINE.yard.y,MINE.yard.z+.62,0,()=>{
-    for(const side of [-1,1])b.put('box','#54402f',side*1.65,1.38,0,.24,2.76,.24,0,0,0,'agedWood');
-    b.put('box','#54402f',0,2.66,0,3.56,.25,.28,0,0,0,'agedWood');
-    b.put('box','#353333',1.18,1.93,0,.08,1.32,.08,0,0,0,'iron');
-    b.put('cyl','#373433',1.18,1.25,0,.35,.14,.35,Math.PI/2,0,0,'iron');
-  });
+  const portalRoot=portal(root,MINE.portal,'BRIARWICK MINE',0);
   b.finish();
+  const forgeRoot=new T.Group();forgeRoot.position.set(MINE.yard.x,MINE.yard.y,MINE.yard.z);root.add(forgeRoot);
+  const forgeBuilder=new Builder(forgeRoot);
+  for(const side of [-1,1])forgeBuilder.put('box','#54402f',side*1.65,1.38,.62,.24,2.76,.24,0,0,0,'agedWood');
+  forgeBuilder.put('box','#54402f',0,2.66,.62,3.56,.25,.28,0,0,0,'agedWood');
+  forgeBuilder.put('box','#353333',1.18,1.93,.62,.08,1.32,.08,0,0,0,'iron');
+  forgeBuilder.put('cyl','#373433',1.18,1.25,.62,.35,.14,.35,Math.PI/2,0,0,'iron');
+  forgeBuilder.finish();
   const delivered=[];
   for(let i=0;i<12;i++){
     const pile=new T.Mesh(new T.DodecahedronGeometry(.27+(i%3)*.035,0),oreMaterials.iron);
-    pile.position.set(MINE.yard.x+1.5+(i%4)*.31,MINE.yard.y+.20+Math.floor(i/4)*.25,MINE.yard.z+.4+(i%2)*.25);
-    pile.castShadow=true;root.add(pile);delivered.push(pile);
+    pile.position.set(1.5+(i%4)*.31,.20+Math.floor(i/4)*.25,.4+(i%2)*.25);
+    pile.castShadow=true;forgeRoot.add(pile);delivered.push(pile);
   }
-  return {root,delivered};
+  return {root,delivered,portalRoot,forgeRoot};
 }
 
 function buildPick(scene){
@@ -146,7 +147,7 @@ export function buildMine(scene,saved={}){
   shade.position.set(end.x,end.y+1.20,end.z);scene.add(shade);
   trackAndTunnel(mouth,mouthStart,MINE_PORTAL_PROGRESS);
   mouth.traverse(object=>object.layers.enable(3));
-  trackAndTunnel(root,0,mouthStart);portal(root,MINE.entry,'NAMELESS MINE',Math.PI);
+  trackAndTunnel(root,0,mouthStart);const entryPortal=portal(root,MINE.entry,'NAMELESS MINE',Math.PI);
   const oreMaterials=Object.fromEntries(METALS.map(metal=>[metal,new T.MeshStandardMaterial({color:oreColors[metal],roughness:.82,metalness:.14})]));
   const veinRoots=buildVeins(root,state),cartVisual=buildCart(scene,state,oreMaterials),yard=buildYard(scene,oreMaterials),lights=[];
   for(let distance=18;distance<MINE_ROUTE_LENGTH-12;distance+=25){
@@ -172,7 +173,7 @@ export function buildMine(scene,saved={}){
   }
   sync();
   const api={
-    ...MINE,root,yardRoot:yard.root,state,cart:state.cart,
+    ...MINE,root,yardRoot:yard.root,objectRoots:{cart:cartVisual.root,portal:yard.portalRoot,forge:yard.forgeRoot,entryPortal},state,cart:state.cart,
     places:Object.freeze([MINE.entry,MINE.portal,MINE.yard]),
     nearby:mineNearby,at:mineAt,next:mineFloor,area:mineLocation,layer:mineLayer,
     depth(y){return Math.max(0,MINE.portal.y-y);},
@@ -182,7 +183,7 @@ export function buildMine(scene,saved={}){
       if(result.ore)strike=.48;
       sync();return result;
     },
-    interaction(x,z,y){const action=state.action(x,z,y);return action?{label:action,perform:()=>api.perform(x,z,y)}:null;},
+    interaction(x,z,y){const action=state.action(x,z,y);return action?{id:actionIds.mine.perform,objectId:'region:mine',label:action,perform:()=>api.perform(x,z,y)}:null;},
     drive(dt,forward){const pose=state.drive(dt,forward);sync();return pose;},
     dismount(){const pose=state.dismount();sync();return pose;},
     snapshot(){return state.snapshot();},

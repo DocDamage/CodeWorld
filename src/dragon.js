@@ -209,6 +209,7 @@ export function makeDragon(parent){
   const turnHead=makeSpring(9.8,4.4),settleWings=makeSpring(6,2.75),settleTail=makeSpring(4.8,2.53),moveJaw=makeSpring(70,11.7);
   const speak=fn=>(voice=1,fn());
   return {
+    root:beast,
     get snapshot(){return dialogue.snapshot;},
     action(x,z,y){
       const onFloor=y<-14.55&&Math.hypot(x+2,z+5.7)<6.2;

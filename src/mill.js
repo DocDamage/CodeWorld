@@ -118,7 +118,7 @@ export function buildMillWheel(root,drive) {
     const p=particles[cursor];cursor=(cursor+1)%particleCount;
     Object.assign(p,{x:range(-.45,.45),y:yy,z:zz,dx:range(-.32,.32),dy:vy+range(.08,1.26)*kick,dz:vz+range(.31,1.34)*kick,life:range(.39,1.35)});
   }
-  return (dt,eye)=>{
+  const tick=(dt,eye)=>{
     if(eye&&Math.hypot(x-eye.x,z-eye.z)>72)return;
     slosh.value+=dt*(.31+drive.speed);
     hub.rotation.x=-drive.angle;
@@ -184,4 +184,5 @@ export function buildMillWheel(root,drive) {
     ringMesh.instanceMatrix.needsUpdate=true;
     geo.attributes.position.needsUpdate=true;geo.attributes.color.needsUpdate=true;
   };
+  tick.root=station;return tick;
 }

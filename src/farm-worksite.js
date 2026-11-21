@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {actionIds} from './actions.js';
 import {TAU,range,tint,v,label} from './model.js';
 import {farmHeight,fieldAt,farmStations} from './farm-layout.js';
 import {wagonCapacity} from './farm-state.js';
@@ -100,41 +101,41 @@ export function buildWorksites(root,b,work,vehicle){
     fieldAction(x,z,yaw){
       const field=fieldAt(x,z,.83);if(!field)return null;
       const crop=field.crop,status=work.fields[crop];
-      if(status.stage==='ripe')return {label:work.hasSickle?`Reap ${crop} with bronze sickle`:`Harvest ${crop}`,perform:()=>{
+      if(status.stage==='ripe')return {id:actionIds.farm.fieldHarvest,objectId:`farm:field:${crop}`,label:work.hasSickle?`Reap ${crop} with bronze sickle`:`Harvest ${crop}`,perform:()=>{
         const result=work.harvest(crop);return result.ok?`Stored ${result.amount} ${crop}.`:result.reason;
       }};
-      if(status.stage==='fallow')return {label:`Till the ${crop} plot`,perform:()=>{work.till(crop);return `${name(crop)} plot prepared.`;}};
-      if(status.stage==='tilled')return {label:`Plant ${crop}`,perform:()=>{
+      if(status.stage==='fallow')return {id:actionIds.farm.fieldTill,objectId:`farm:field:${crop}`,label:`Till the ${crop} plot`,perform:()=>{work.till(crop);return `${name(crop)} plot prepared.`;}};
+      if(status.stage==='tilled')return {id:actionIds.farm.fieldPlant,objectId:`farm:field:${crop}`,label:`Plant ${crop}`,perform:()=>{
         const result=work.plant(crop);return result.ok?`Planted ${crop}. Water the rows or wait for rain.`:result.reason;
       }};
-      if(status.moisture<.68)return {label:`Water ${crop}`,perform:()=>{
+      if(status.moisture<.68)return {id:actionIds.farm.fieldWater,objectId:`farm:field:${crop}`,label:`Water ${crop}`,perform:()=>{
         const result=work.water(crop);if(result.ok)streams.splash(x,z,field,yaw);return result.ok?`Watered ${crop}.`:result.reason;
       }};
       return null;
     },
     stationAction(x,z){
-      if(near(x,z,water,1.38))return {label:'Refill the watering can',perform:()=>work.refill().ok?'Watering can refilled.':'The watering can is full.'};
-      if(near(x,z,feed,1.40))return {label:'Mix animal feed',perform:()=>{const m=work.mixFeed();return m.ok?`Mixed ${m.amount} feed rations.`:m.reason;}};
-      if(near(x,z,eggs,1.47))return {label:'Collect eggs',perform:()=>{const m=work.collectEggs();return m.ok?`Collected ${m.amount} ${m.amount===1?'egg':'eggs'}.`:m.reason;}};
-      for(const trough of troughs)if(near(x,z,trough,1.35))return {label:`Feed the ${trough.name}`,perform:()=>{
+      if(near(x,z,water,1.38))return {id:actionIds.farm.waterRefill,objectId:'farm:station:water',label:'Refill the watering can',perform:()=>work.refill().ok?'Watering can refilled.':'The watering can is full.'};
+      if(near(x,z,feed,1.40))return {id:actionIds.farm.feedMix,objectId:'farm:station:feed',label:'Mix animal feed',perform:()=>{const m=work.mixFeed();return m.ok?`Mixed ${m.amount} feed rations.`:m.reason;}};
+      if(near(x,z,eggs,1.47))return {id:actionIds.farm.eggsCollect,objectId:'farm:station:eggs',label:'Collect eggs',perform:()=>{const m=work.collectEggs();return m.ok?`Collected ${m.amount} ${m.amount===1?'egg':'eggs'}.`:m.reason;}};
+      for(const trough of troughs)if(near(x,z,trough,1.35))return {id:actionIds.farm.animalFeed,objectId:`farm:trough:${trough.kind}`,label:`Feed the ${trough.name}`,perform:()=>{
         const result=work.feed(trough.kind);return result.ok?`Filled the ${trough.name}' trough.`:result.reason;
       }};
       if(vehicle.nearWagon(x,z)){
-        if(near(vehicle.wagon.x,vehicle.wagon.z,store,5.0)&&work.wagonLoad)return {label:'Unload the hay wagon',perform:()=>`Stored ${work.unloadWagon().amount} units from the wagon.`};
-        return {label:'Load harvest onto the wagon',perform:()=>{const m=work.loadWagon();return m.ok?`Loaded ${m.amount} units onto the wagon.`:m.reason;}};
+        if(near(vehicle.wagon.x,vehicle.wagon.z,store,5.0)&&work.wagonLoad)return {id:actionIds.farm.wagonUnload,objectId:'farm:wagon',label:'Unload the hay wagon',perform:()=>`Stored ${work.unloadWagon().amount} units from the wagon.`};
+        return {id:actionIds.farm.wagonLoad,objectId:'farm:wagon',label:'Load harvest onto the wagon',perform:()=>{const m=work.loadWagon();return m.ok?`Loaded ${m.amount} units onto the wagon.`:m.reason;}};
       }
       return null;
     },
     driverAction(){
       const {x,z}=vehicle.pose,field=fieldAt(x,z);
       if(vehicle.hitched){
-        if(near(x,z,store,6.5)&&work.wagonLoad)return {label:'Unload the wagon at the barn',perform:()=>`Stored ${work.unloadWagon().amount} units from the wagon.`};
-        if(field&&work.fields[field.crop].stage==='ripe')return {label:`Harvest ${field.crop} into the wagon`,perform:()=>{
+        if(near(x,z,store,6.5)&&work.wagonLoad)return {id:actionIds.farm.wagonUnload,objectId:'farm:wagon',label:'Unload the wagon at the barn',perform:()=>`Stored ${work.unloadWagon().amount} units from the wagon.`};
+        if(field&&work.fields[field.crop].stage==='ripe')return {id:actionIds.farm.fieldHarvest,objectId:`farm:field:${field.crop}`,label:`Harvest ${field.crop} into the wagon`,perform:()=>{
           const result=work.harvest(field.crop,'wagon');return result.ok?`Loaded ${result.amount} ${field.crop}.`:result.reason;
         }};
         return null;
       }
-      return {label:vehicle.plowing?'Raise the plow':'Lower the plow',perform:()=>{
+      return {id:actionIds.farm.plowToggle,objectId:'farm:tractor',label:vehicle.plowing?'Raise the plow':'Lower the plow',perform:()=>{
         const lowered=vehicle.togglePlow();
         return lowered===null?'Clear the area behind the tractor before lowering the plow.':lowered?'Plow lowered. Drive across an unprepared plot.':'Plow raised.';
       }};

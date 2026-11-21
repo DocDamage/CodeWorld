@@ -8,6 +8,7 @@ import { estate,moatDistance,trail,trailDistance } from './estate.js';
 import { lantern } from './houses.js';
 import { CASTLE_LAYOUT } from './castle.js';
 import { catacombTerrainCut } from './catacomb-layout.js';
+import { forestSites } from './forest-species.js';
 
 function easternGround(root){
   const pos=[],idx=[],cols=[],uv=[],nx=233,nz=253,step=.88;
@@ -58,6 +59,11 @@ function sign(root,b,t,title){
 }
 export function buildWoodland(root,leaves){
   const ground=easternGround(root);const b=new Builder(root),trailGround=trailMesh(root,b);
+  const siteKeys={'Alder Glade':'alder-glade','Fern Hollow':'fern-hollow','High Pines':'high-pines','Bracken Meadow':'bracken-meadow'},siteRoots={};
+  for(const site of forestSites){
+    const key=siteKeys[site.name],group=new T.Group();group.name=`world:woodland:site:${key}`;group.position.set(site.x,height(site.x,site.z),site.z);
+    group.userData.site=site.name;root.add(group);siteRoots[key]=group;
+  }
   const trunks=new Map(),collisionStats={trees:0,lanterns:0,logs:0,rocks:0},collisionSamples={};
   function register(x,z,r,kind='trees',crown=null){
     const k=Math.floor(x/5)+','+Math.floor(z/5);if(!trunks.has(k))trunks.set(k,[]);trunks.get(k).push({x,z,r,crown});collisionStats[kind]++;
@@ -113,5 +119,5 @@ export function buildWoodland(root,leaves){
     }
     return true;
   };
-  return {clear,ground,trailGround,collisionStats:Object.freeze(collisionStats),collisionSamples:Object.freeze(collisionSamples)};
+  return {clear,ground,trailGround,objectRoots:{sites:siteRoots},collisionStats:Object.freeze(collisionStats),collisionSamples:Object.freeze(collisionSamples)};
 }

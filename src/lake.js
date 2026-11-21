@@ -16,7 +16,7 @@ function bearing(x,z){
 export function buildLake(scene,camera,material,updateFov,pulse){
   const root=new T.Group();scene.add(root);
   const scenery=buildLakeScenery(root,material);
-  const cover=root.children.filter(item=>item.isMesh&&!item.material.transparent);
+  const cover=[];root.traverse(item=>{if(item.isMesh&&!item.material.transparent)cover.push(item);});
   const vesselRoot=new T.Group();root.add(vesselRoot);
   const wildlife=buildLakeWildlife(root);
   const vessel=createLakeBoat(),{boat}=vessel,drawBoat=buildBoatModel(vesselRoot);
@@ -187,7 +187,7 @@ export function buildLake(scene,camera,material,updateFov,pulse){
       showText(el('lakeAnchor'),boat.anchored?'Weigh anchor':'Drop anchor');
     }
   }
-  return {shores:scenery.shores,boat,tick,interact,toggleBoard,boardAt,leave,clearReel,setReel,clear:scenery.clear,
+  return {root,vesselRoot,objectRoots:{...scenery.objectRoots,boat:drawBoat.root},shores:scenery.shores,boat,tick,interact,toggleBoard,boardAt,leave,clearReel,setReel,clear:scenery.clear,
     get scoped(){return scoped;},get active(){return active;},
     drive(dt,forward,steer,t,gust){vessel.step(dt,forward,steer,lakeWind(t,gust));},
     key(code){
