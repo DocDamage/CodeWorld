@@ -49,3 +49,7 @@ Choose **Walk here**, press Escape, or use the controller’s B / ○ button to 
 | Use a controller or touch screen | Open **?** for controls. Context prompts identify available actions. Controller bumpers adjust tour speed. |
 
 Run `node --test` to check the game logic. Run `npm run build` after editing the source to rebuild the browser bundle.
+
+Developers adding buildings, major props, interactions, or future asset replacements should follow the [world object, ownership, manifest, and Unreal-boundary guidance](docs/WORLD_OBJECTS.md).
+
+The [implementation report](docs/WORLD_VALIDATION.md) includes browser comparisons, render measurements, and save-compatibility checks.

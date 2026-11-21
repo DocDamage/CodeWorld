@@ -1,0 +1,426 @@
+{
+  "schema": "briarwick-world-objects",
+  "version": 1,
+  "coordinateSystem": {
+    "handedness": "right",
+    "up": "y",
+    "forward": "negative-z",
+    "units": "meters",
+    "angles": "radians",
+    "rotationOrder": "YXZ"
+  },
+  "objects": [
+    {
+      "id": "bakery",
+      "type": "building",
+      "gameplayRole": "bakery",
+      "name": "Bramble Bakery",
+      "parentId": "region:village",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          10.1,
+          1.05,
+          15.3
+        ],
+        "rotation": [
+          0,
+          -0.26,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "visual": {
+        "assetKey": "procedural:village/bakery",
+        "binding": "procedural"
+      },
+      "collision": {
+        "shape": "oriented-box",
+        "width": 6.6,
+        "depth": 5.2
+      },
+      "anchors": {
+        "ground": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "forward": [
+            0,
+            0,
+            1
+          ]
+        },
+        "entrance": {
+          "position": [
+            -1.65,
+            0,
+            2.84
+          ],
+          "forward": [
+            0,
+            0,
+            1
+          ]
+        },
+        "arrival": {
+          "position": [
+            -1.65,
+            0,
+            3.1999999999999997
+          ],
+          "forward": [
+            0,
+            0,
+            -1
+          ]
+        },
+        "delivery": {
+          "position": [
+            2.508,
+            0,
+            3.8899999999999997
+          ],
+          "forward": [
+            0,
+            0,
+            -1
+          ]
+        }
+      },
+      "relationships": {
+        "interiorId": "room:bakery",
+        "roadId": "road:bakery",
+        "children": [
+          "room:bakery",
+          "bakery:delivery-cart"
+        ]
+      },
+      "placement": {
+        "dependencies": [
+          "visual-transform",
+          "plot-collision",
+          "door-anchors",
+          "road:bakery",
+          "road-spatial-cache"
+        ]
+      },
+      "generation": {
+        "builder": "cottage",
+        "dimensions": {
+          "width": 6.6,
+          "depth": 5.2,
+          "height": 4.55
+        },
+        "resolved": {
+          "wall": "#cdb995",
+          "roof": "#844638"
+        },
+        "random": {
+          "algorithm": "lcg32-1664525-1013904223",
+          "initialState": 300270388
+        }
+      }
+    },
+    {
+      "id": "room:bakery",
+      "type": "interior",
+      "gameplayRole": "building-interior",
+      "name": "Bramble Bakery interior",
+      "parentId": "bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "interior-local",
+      "visual": {
+        "assetKey": "procedural:interior/bakery",
+        "binding": "procedural"
+      },
+      "collision": {
+        "shape": "interior-bounds",
+        "width": 11.4,
+        "depth": 10.4
+      },
+      "anchors": {
+        "entrance": {
+          "position": [
+            0,
+            0,
+            4.68
+          ],
+          "forward": [
+            0,
+            0,
+            -1
+          ]
+        }
+      },
+      "relationships": {
+        "exteriorId": "bakery",
+        "children": [
+          "room:bakery:structure",
+          "room:bakery:furnishings",
+          "room:bakery:workshop",
+          "room:bakery:sleeping-loft",
+          "room:bakery:lighting"
+        ]
+      },
+      "generation": {
+        "builder": "village-room",
+        "layout": {
+          "halfW": 5.7,
+          "halfD": 5.2,
+          "stairSide": 4.08,
+          "landing": -2.0500000000000003,
+          "foot": 1.7599999999999998
+        }
+      }
+    },
+    {
+      "id": "room:bakery:structure",
+      "type": "interior-section",
+      "gameplayRole": "structure",
+      "parentId": "room:bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "interior-local",
+      "visual": {
+        "assetKey": "procedural:interior/bakery/structure",
+        "binding": "live-scene"
+      },
+      "anchors": {},
+      "collision": null,
+      "relationships": {
+        "children": []
+      },
+      "generation": {
+        "builder": "structure"
+      }
+    },
+    {
+      "id": "room:bakery:furnishings",
+      "type": "interior-section",
+      "gameplayRole": "furnishings",
+      "parentId": "room:bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "interior-local",
+      "visual": {
+        "assetKey": "procedural:interior/bakery/furnishings",
+        "binding": "live-scene"
+      },
+      "anchors": {},
+      "collision": null,
+      "relationships": {
+        "children": []
+      },
+      "generation": {
+        "builder": "furnishings"
+      }
+    },
+    {
+      "id": "room:bakery:workshop",
+      "type": "interior-section",
+      "gameplayRole": "workshop",
+      "parentId": "room:bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "interior-local",
+      "visual": {
+        "assetKey": "procedural:interior/bakery/workshop",
+        "binding": "live-scene"
+      },
+      "anchors": {},
+      "collision": null,
+      "relationships": {
+        "children": []
+      },
+      "generation": {
+        "builder": "workshop"
+      }
+    },
+    {
+      "id": "room:bakery:sleeping-loft",
+      "type": "interior-section",
+      "gameplayRole": "sleeping-loft",
+      "parentId": "room:bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "interior-local",
+      "visual": {
+        "assetKey": "procedural:interior/bakery/sleeping-loft",
+        "binding": "live-scene"
+      },
+      "anchors": {},
+      "collision": null,
+      "relationships": {
+        "children": []
+      },
+      "generation": {
+        "builder": "sleeping-loft"
+      }
+    },
+    {
+      "id": "room:bakery:lighting",
+      "type": "interior-section",
+      "gameplayRole": "lighting",
+      "parentId": "room:bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "interior-local",
+      "visual": {
+        "assetKey": "procedural:interior/bakery/lighting",
+        "binding": "live-scene"
+      },
+      "anchors": {},
+      "collision": null,
+      "relationships": {
+        "children": []
+      },
+      "generation": {
+        "builder": "lighting"
+      }
+    },
+    {
+      "id": "bakery:delivery-cart",
+      "type": "prop",
+      "gameplayRole": "delivery-cart",
+      "name": "Bakery delivery cart",
+      "parentId": "bakery",
+      "regionId": "region:village",
+      "transform": {
+        "position": [
+          14.541071003306495,
+          1.200704381145961,
+          19.9996689610642
+        ],
+        "rotation": [
+          0,
+          0.43999999999999995,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "transformSpace": "world",
+      "visual": {
+        "assetKey": "procedural:village/bakery:delivery-cart",
+        "binding": "spatial-reference"
+      },
+      "collision": {
+        "shape": "circle",
+        "radius": 1.17
+      },
+      "anchors": {},
+      "relationships": {
+        "children": []
+      },
+      "generation": {
+        "builder": "delivery-cart"
+      }
+    }
+  ]
+}
