@@ -1,3 +1,4 @@
+import {castleFixture} from './castle-objects.js';
 import {furnishRoyalSuite,furnishWings,furnishHousehold,furnishVaultStores} from './castle-fittings.js';
 import * as T from 'three';
 import {v,pick,tint} from './model.js';
@@ -76,7 +77,7 @@ export function buildKeep(k){
   k.plaque('Great Hall',0,3.94,hi+.25);
   k.room('Great hall & throne',-6,6,lo,hi,0,4.6);
   runner(k,0,-12.6,2.04,14.6,0);
-  k.furnishing(0,-19.1,0,2.5,1.66,b=>{
+  castleFixture(k,'throne','Throne and dais',0,-19.1,0,2.5,1.66,b=>{
     b.put('box','#aa987a',0,.13,.03,2.5,.26,1.59,0,0,0,'masonry');wood(b,0,.71,0,1.08,.19,.82);
     for(const x of [-.47,.47]){wood(b,x,.46,0,.12,.60,.67);wood(b,x,.98,0,.13,.17,.78);}
     wood(b,0,1.31,-.36,1.13,1.55,.15);b.put('arch',red,0,1.38,-.26,.89,1.29,.055);
@@ -100,7 +101,7 @@ export function buildKeep(k){
   k.furnishing(-13.10,-19.83,0,2.4,1.25,b=>hearth(b,0,0,true));
   k.furnishing(-11.25,-10.8,0,2.8,.98,b=>{table(b,0,0,2.8,.98);vessel(b,-.72,.87,0,.52,'#9a6b49');plate(b,.26,.87,0,.5);vessel(b,.89,.87,0,.36);});
   partition(k,'x',-12.98,-10.35,-6,0,base,[-8.15]);k.wall('z',-10.35,lo,-12.98,0,base,[]);
-  k.zones.unshift({name:'Pantry & buttery',x1:-10.35,x2:-6,z1:lo,z2:-12.98,base:0,top:4});
+  k.room('Pantry & buttery',-10.35,-6,lo,-12.98,0,4,true);
   stock(k,-8.1,-19.98,0,3.36,'pots');for(const x of [-9.68,-8.84])k.furnishing(x,-14.26,0,.7,.7,b=>cask(b,0,0));
   k.room('Chapel',6,east,lo,hi,0,4.2);
   for(const z of [-9.05,-11.0,-12.95])for(const x of [8.46,12.93])k.furnishing(x,z,0,2.20,.52,b=>{table(b,0,0,2.2,.51,.46);wood(b,0,.69,.22,2.18,.43,.09);});
@@ -117,7 +118,7 @@ export function buildKeep(k){
   for(const x of [-13.65,-11.6,-8.48])k.furnishing(x,-15.63,base,1.16,.65,b=>{chest(b,0,0);for(let j=0;j<8;j++)b.put('disk',gold,(j%4-.5)*.13,.62+Math.floor(j/4)*.045,0,.15,.035,.15);});
   k.room('King’s chamber',6,east,lo,-9.75,base,8.8);
   runner(k,8.55,-12.56,2.27,5.18,base,'#642c40');
-  k.furnishing(12.09,-14.22,base,2.68,3.18,b=>{
+  castleFixture(k,'royal-bed','Royal canopy bed',12.09,-14.22,base,2.68,3.18,b=>{
     wood(b,0,.30,0,2.62,.38,3.08,walnut);b.put('box',linen,0,.57,0,2.48,.26,2.92);
     b.put('box','#843d52',0,.74,.48,2.52,.13,1.93);
     for(const x of [-1.14,1.14])b.put('box','#cc9d5f',x,.809,.48,.035,.014,1.80);
@@ -186,7 +187,7 @@ export function buildWings(k){
   for(const x of [16.44,18.59])bedPlace(k,x,5.45,0,'#87785e');
   k.furnishing(-17.55,5.52,0,2.52,.74,b=>{cupboard(b,0,0,2.52,.73,.80);for(let j=-2;j<=2;j++){
     b.put('arch',j%2?red:'#577987',j*.48,1.45,0,.40,.75,.12,0,0,Math.PI);b.put('ball',brass,j*.48,1.45,.08,.11,.11,.06);}});
-  k.furnishing(-18.49,12.26,0,1.92,1.35,b=>hearth(b,0,0),Math.PI/2);
+  castleFixture(k,'smithy-hearth','Smithy hearth',-18.49,12.26,0,1.92,1.35,b=>hearth(b,0,0),Math.PI/2);
   k.furnishing(-15.65,10.25,0,1.25,.69,b=>{wood(b,0,.30,0,.74,.60,.60);b.put('box',iron,0,.71,0,1.14,.25,.44);b.put('cone',iron,-.65,.74,0,.35,.58,.35,0,0,Math.PI/2);});
   for(const z of [9.08,11.52])k.furnishing(18.25,z,0,2.2,.97,b=>{wood(b,0,.32,0,2.2,.24,.67);b.put('box','#bda364',0,.53,0,1.97,.30,.59);for(const x of [-.91,.91])wood(b,x,.20,0,.11,.40,.55);});
   for(const z of [10.38,12.9])k.solid(17.84,0,z,3.3,1.10,.13,oak,'wood');
@@ -214,18 +215,34 @@ export function buildHousehold(k){
   k.furnishing(5.38,-2.64,0,1.95,.71,b=>{cupboard(b,0,0,1.95,.71,.77);for(let j=0;j<5;j++)b.put('box',j%2?linen:'#9db1aa',0,.85+j*.07,0,.95,.075,.48);});
   lodge(-11.65,-4.75,-3.8,1.75,['Guest chamber'],1);
   bedPlace(k,-9.93,-1.11,0,'#aa7d73');k.furnishing(-7.23,-2.33,0,.86,.61,b=>{cupboard(b,0,0,.86,.61,.64);candle(b,0,.69,0);});
-  k.furnishing(16.63,11.02,0,1.72,.82,b=>{
-    const coat='#8f6349';
-    b.put('ball',coat,0,1.00,0,1.39,.75,.59);
-    b.put('ball',coat,-.58,1.44,0,.45,.99,.43,0,0,-.27);
-    b.put('ball',coat,-.82,1.80,0,.67,.35,.31,0,0,.13);
+  k.furnishing(16.63,11.02,0,2.30,.82,b=>{
+    const coat='#8f6349',mane='#503c31',sock='#71503b',hoof='#49423b';
+    b.put('ball',coat,-.04,1.12,0,1.35,.74,.59);
+    b.put('ball',coat,.43,1.14,0,.69,.75,.62);
+    b.put('ball',coat,-.52,1.21,0,.61,.78,.56,0,0,.19);
+    b.put('ball',coat,-.66,1.53,0,.43,.90,.41,0,0,.37);
+    b.put('ball',coat,-.91,1.84,0,.51,.38,.33,0,0,.40);
+    b.put('ball','#785643',-1.11,1.71,0,.38,.25,.28,0,0,.49);
     for(const side of [-1,1]){
-      b.put('cone',coat,-.62,2.04,side*.09,.11,.25,.09);
-      b.put('ball','#292725',-.82,1.86,side*.15,.044,.046,.031);
-      for(const xx of [-.43,.48]){b.beam(coat,v(xx,.88,side*.17),v(xx+.04,.15,side*.21),.12,.13,'cyl');b.put('box','#493e33',xx+.016,.077,side*.21,.16,.15,.14);}
+      b.put('cone',coat,-.79,2.075,side*.105,.109,.26,.095,side*.13,0,-.12);
+      b.put('ball','#292725',-.99,1.88,side*.151,.052,.048,.028);
+      b.put('ball',mane,-1.235,1.75,side*.094,.050,.035,.027);
+      for(const rear of [false,true]){
+        const shift=side*.055,z=side*.18;
+        const hip=v(rear?.44:-.53,1.02,z);
+        const knee=v((rear?.22:-.40)+shift,.70,z),hock=v((rear?.54:-.49)+shift,.43,z*1.06);
+        const fetlock=v((rear?.48:-.53)+shift,.16,z*1.1),toe=v(fetlock.x-.05,.077,z*1.1);
+        b.put('ball',coat,hip.x-.02,hip.y-.10,z,.30,.54,.21,0,0,rear?-.28:.14);
+        for(const [from,to,w,col] of [[hip,knee,.16,coat],[knee,hock,.112,coat],[hock,fetlock,.081,sock],[fetlock,toe,.089,sock]])
+          b.beam(col,from,to,w,w,'cyl');
+        b.put('ball',sock,hock.x,hock.y,hock.z,.13,.15,.12);
+        b.put('barrel',hoof,toe.x-.014,.065,toe.z,.15,.13,.13,0,0,-.10);
+      }
     }
-    b.beam('#544038',v(.61,1.13,0),v(.79,.49,0),.16,.19,'cyl');
-  },.15,1.87);
+    for(let i=0;i<8;i++)b.put('ball',mane,-.79+i*.045,1.91-i*.067,.016,.13,.25,.09,0,0,.58);
+    b.put('ball',mane,.77,.93,0,.24,.78,.19,0,0,.23);
+    b.put('ball',mane,.86,.60,.025,.19,.58,.16,0,0,-.10);
+  },.15,2.20);
   // The enlarged north bailey is domestic rather than ceremonial: animals,
   // hot water, mending and the night staff keep it busy after the hall closes.
   lodge(-22.35,-12.75,14.15,21.00,['Falconry','Hound keeper'],1);
@@ -237,7 +254,7 @@ export function buildHousehold(k){
   k.furnishing(18.72,18.62,0,2.65,.92,b=>{table(b,0,0,2.65,.92);for(const x of [-.81,-.22,.36,.86])b.put('box',x<0?linen:'#926573',x,.91,0,.48,.06,.57);candle(b,1.02,.90,0);});
 }
 export function buildDungeon(k){
-  const prison=-4.8,gallery=-10.45,pit=-16;
+  const prison=-4.8,gallery=-10.45;
   k.cutSlab(-17,17,-13,14,prison,[-1.75,1.05,-10.4,3.40],'#958c7c');
   for(const z of [-13,14])k.wall('x',z,-17,17,prison,4.75,[],darkStone);
   for(const x of [-17,17])k.wall('z',x,-13,14,prison,4.75,[],darkStone);
@@ -270,6 +287,9 @@ export function buildDungeon(k){
   k.room('Warden’s office',9.85,17,-3.6,5.37,prison,-.1);k.furnishing(14.25,.12,prison,2.3,.85,b=>{table(b,0,0,2.3,.85);volume(b,-.4,.88,0);candle(b,.65,.88,0);});
   k.room('Wine cellar',9.85,17,5.37,14,prison,-.1);for(let j=0;j<4;j++)for(let i=0;i<2;i++)k.furnishing(14.5+i*1.02,6.6+j*1.61,prison,.87,.87,b=>cask(b,0,0,1.14));
   k.room('Prison galleries',-17,17,-13,14,prison,-.1);
+}
+export function buildVault(k){
+  const prison=-4.8,gallery=-10.45,pit=-16;
   k.slab(-20,20,-18.5,18.5,pit,'#706b65');
   k.slab(-18.9,18.9,-18.2,-10.4,gallery,'#948d81');
   for(const z of [-18.5,18.5])k.wall('x',z,-20,20,pit,11.1,[],'#77736e',.64);

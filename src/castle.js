@@ -1,9 +1,10 @@
+import {castleSection,castleLevel} from './castle-objects.js';
 import {plantShrub} from './trees.js';
 import {dragonBed} from './hoard.js';
 import * as T from 'three';
 import { Builder,v,TAU,range,tint } from './model.js';
 import { CastleKit,stone,trim,darkStone,red,gold } from './castle-kit.js';
-import { buildKeep,buildWings,buildHousehold,buildDungeon } from './castle-rooms.js';
+import { buildKeep,buildWings,buildHousehold,buildDungeon,buildVault } from './castle-rooms.js';
 import { makeDragon } from './dragon.js';
 import { estate,estateHeight,moatDistance } from './estate.js';
 import { table,chair,volume,candle,wood,oak,iron } from './furnishings.js';
@@ -59,7 +60,7 @@ function tower(k,x,z,rise,spireH){
   const top=rise*2+2.48;
   k.b.put('box',darkStone,x,top,z,r*2+.39,.33,r*2+.39,0,0,0,'masonry');
   spire(k,x,top+.12,z,3.86,spireH);
-  k.room((z>0?'Gate':'Crown')+' tower · '+(x>0?'East':'West'),x-r,x+r,z-r,z+r,0,top);
+  k.room((z>0?'Gate':'Crown')+' tower · '+(x>0?'East':'West'),x-r,x+r,z-r,z+r,0,top,false,(z>0?'gate':'crown')+'-tower-'+(x>0?'east':'west'));
 }
 function ramparts(k){
   for(const s of [-1,1]){
@@ -93,7 +94,7 @@ function gatehouse(k){
     for(const xx of [x-2.1,x+2.1])k.wall('z',xx,19.40,24,0,4.8,[]);
     k.slab(x-2.1,x+2.1,19.40,24,4.8);
     k.furnishing(x,22.85,0,1.40,.67,b=>{table(b,0,0,1.4,.67);volume(b,-.2,.88,0);candle(b,.49,.88,0);});
-    k.room('Gatehouse watch room',x-2.1,x+2.1,19.40,24,0,4.6);
+    k.room('Gatehouse watch room',x-2.1,x+2.1,19.40,24,0,4.6,false,x>0?'watch-east':'watch-west');
     // The gatehouse rises into twin watch towers. Both galleries open onto the wall walk.
     for(const xx of [x-2.1,x+2.1])k.wall('z',xx,19.40,24.42,4.8,3.05,[[23.08,1.84]]);
     for(const zz of [19.40,24.42])k.wall('x',zz,x-2.1,x+2.1,4.8,3.05,[[x,1.15,.84,1.61]]);
@@ -104,7 +105,7 @@ function gatehouse(k){
     for(const zz of [19.40,24.42])k.wall('x',zz,x-2.1,x+2.1,7.85,2.09,[[x,1.64,.67,1.24]]);
     k.box(x,9.96,22.26,4.63,.23,4.68,trim,'stone');
     spire(k,x,10.03,22.26,3.19,6.08);
-    k.room('Gatehouse lookout',x-2.1,x+2.1,19.40,24.42,4.8,10.0);
+    k.room('Gatehouse lookout',x-2.1,x+2.1,19.40,24.42,4.8,10.0,false,x>0?'lookout-east':'lookout-west');
     k.banner(x,3.13,24.50,1.04,2.40);
     k.torch(s*2.64,2.15,24.63);
   }
@@ -159,6 +160,7 @@ function drawbridge(k){
   }
   let angle=0,goal=0;
   return {
+    root:hinge,
     get down(){return angle<.025&&goal===0;},
     action(x,z,y){
       return Math.abs(y)<.5&&((Math.hypot(x+2.72,z-37)<2.45&&z>36.48)||(Math.hypot(x+2.72,z-22.24)<2.34&&z<24))?(goal?'Lower drawbridge':'Raise drawbridge'):'';
@@ -174,9 +176,12 @@ function drawbridge(k){
   };
 }
 export function buildCastle(scene,waterMaterial){
-  const root=new T.Group();root.position.set(estate.x,estate.y,estate.z);scene.add(root);
-  const k=new CastleKit(root);k.cutSlab(-CASTLE_LAYOUT.floorHalfX,CASTLE_LAYOUT.floorHalfX,-CASTLE_LAYOUT.floorHalfZ,CASTLE_LAYOUT.floorHalfZ,0,[6.25,8.75,3.00,12.8],'#b4aa95');
-  ramparts(k);gatehouse(k);buildKeep(k);buildWings(k);buildHousehold(k);
+  const root=new T.Group();root.position.set(estate.x,estate.y,estate.z);scene.add(root);castleLevel(root,'castle:surface','Thornmere Castle','region:castle');
+  const k=new CastleKit(root);k.b.ownership={objectId:'castle:surface',partId:'courtyard'};k.cutSlab(-CASTLE_LAYOUT.floorHalfX,CASTLE_LAYOUT.floorHalfX,-CASTLE_LAYOUT.floorHalfZ,CASTLE_LAYOUT.floorHalfZ,0,[6.25,8.75,3.00,12.8],'#b4aa95');
+  ramparts(k);gatehouse(k);
+  castleSection(k,'castle:keep','Royal keep','castle:surface',buildKeep);
+  castleSection(k,'castle:wings','Service wings','castle:surface',buildWings);
+  castleSection(k,'castle:household','Household lodges','castle:surface',buildHousehold);
   for(const x of [6.25,8.75])k.rail(x,3,x,12.75,0);
   k.rail(6.25,3,8.75,3,0);
   // Hang the sign overhead to leave the foot of the stair completely open.
@@ -201,7 +206,10 @@ export function buildCastle(scene,waterMaterial){
   for(const x of [-2.10,2.10])k.torch(x,2.25,-4.48,{width:.34,height:.65,embers:7});
   moat(root,waterMaterial,k.b);const bridge=drawbridge(k);k.b.finish();
   const below=new T.Group();root.add(below);const dungeon=new CastleKit(below);
-  const tickCoins=buildDungeon(dungeon);dungeon.b.finish();
+  castleLevel(below,'castle:dungeon','Castle dungeons','castle:surface');
+  dungeon.b.ownership={objectId:'castle:dungeon',partId:'structure'};
+  buildDungeon(dungeon);dungeon.b.finish();
+  const tickCoins=castleSection(dungeon,'castle:vault','Dragon vault','castle:dungeon',buildVault);
   for(const prop of ['surfaces','blocks','zones'])k[prop].push(...dungeon[prop]);
   const dragon=makeDragon(below);
   const lights=[[-9,-2,1,'#ffe0a4',30],[7,-2,5,'#ffc58b',27],[-4,-8,-9,'#efba83',28],[0,-10,-3,'#ffc499',46],[9,-12,5,'#a3dbdc',55],[-9,-10,8,'#e2ad73',56]].map(([x,y,z,c,i])=>{const light=new T.PointLight(c,i,27,1.6);light.position.set(x,y,z);below.add(light);return light;});
@@ -212,8 +220,10 @@ export function buildCastle(scene,waterMaterial){
   wardLamp.position.set(1.60,3.05,18);root.add(wardLamp);
   const royalLamp=new T.PointLight('#ffc275',16,8,1.8);
   royalLamp.position.set(9.9,7.89,-14.8);root.add(royalLamp);
+  const upperEffects=[root,...k.effectRoots].filter(g=>g.userData.fires||g.userData.smokeSources);
+  const lowerEffects=[below,...dungeon.effectRoots].filter(g=>g.userData.fires||g.userData.smokeSources);
   // Keep the view through the stairwell, and skip the underground sets from the distant village.
-  return {bridge,kit:k,
+  return {root,bridge,kit:k,
     dragon,
     nearby(x,z){return Math.abs(x-estate.x)<41&&Math.abs(z-estate.z)<39;},
     next(x,z,previous,ground){
@@ -234,14 +244,15 @@ export function buildCastle(scene,waterMaterial){
       bridge.tick(dt);
       const near=!insideVillage&&Math.hypot(eye.x-estate.x,eye.z-estate.z)<78;
       const lx=eye.x-estate.x,lz=eye.z-estate.z;
-      below.visible=near&&Math.abs(lx)<34&&Math.abs(lz)<28;
+      const stairView=Math.abs(lx-7.5)<9&&lz>-.5&&lz<20&&eye.y<estate.y+4.2;
+      below.visible=near&&Math.abs(lx)<34&&Math.abs(lz)<28&&(eye.y<estate.y+.3||stairView);
       hallLamp.visible=near&&eye.y>estate.y-1;wardLamp.visible=hallLamp.visible&&night>.12;
       royalLamp.visible=hallLamp.visible&&Math.hypot(eye.x-estate.x-10,eye.z-estate.z+13)<29;
       royalLamp.intensity=13+night*10+Math.sin(t*8.3)*.65;
       hallLamp.intensity=11+night*12;if(!near)return;
       for(const l of lights)l.visible=eye.y<estate.y+2;
-      animateFires(root,t);animateFires(below,t);
-      stepSmoke(root,dt,t,wind*.54,eye,viewport,night);stepSmoke(below,dt,t,0,eye,viewport,night);
+      for(const g of upperEffects){animateFires(g,t);stepSmoke(g,dt,t,wind*.54,eye,viewport,night);}
+      for(const g of lowerEffects){animateFires(g,t);stepSmoke(g,dt,t,0,eye,viewport,night);}
       if(below.visible)dragon.tick(t,dt,{x:lx,y:eye.y-estate.y,z:lz});
       for(const m of k.flags){const a=m.geometry.attributes.position;for(let j=0;j<=8;j++){const f=j/8,flutter=.22*f*Math.sin(t*2.3-f*5+m.position.x);a.setZ(j*2,flutter);a.setZ(j*2+1,flutter+.053*f);}a.needsUpdate=true;}
     }

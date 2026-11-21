@@ -45,7 +45,7 @@ test('royal suite has room to circulate and tall cabinets clear window recesses'
   assert.ok((room.x2-room.x1)*(room.z2-room.z1)>=130);
   const royal=furniture.filter(f=>f.base===room.base&&f.x>room.x1&&f.x<room.x2&&f.z>room.z1&&f.z<room.z2);
   assert.ok(royal.length>=11);
-  for(const [x,z] of [[6,-15.13],[8.6,-9.75],[12,-16.65],[16.65,-15],[10,-11.05]])
+  for(const [x,z] of [[17.94,-10.46],[6,-15.13],[8.6,-9.75],[12,-16.65],[16.65,-15],[10,-11.05]])
     assert.equal(kit.floorAt(x,z,room.base),room.base,'royal route at '+x+','+z);
   for(const win of windows)for(const f of furniture){
     if(f.base!==win.base||f.h<=win.sill)continue;
@@ -53,4 +53,21 @@ test('royal suite has room to circulate and tall cabinets clear window recesses'
     assert.ok(Math.abs(cross-win.line)>depth+.46||Math.abs(along-win.center)>(width+win.w/2),
       'window at '+win.axis+'='+win.line+', '+win.center+' behind tall furniture at '+f.x+','+f.z);
   }
+});
+test('castle room anchors and the selectable canopy bed resolve to the built geometry',async()=>{
+  const {buildCastle}=await import('../src/castle.js');
+  const {worldAnchor,worldObjects}=await import('../src/world-objects.js');
+  const scene=new Group(),castle=buildCastle(scene);
+  scene.updateMatrixWorld(true);
+  const id='castle:fixture:royal-bed',bed=worldObjects.binding(id);
+  assert.equal(bed.parent,worldObjects.binding('castle:room:royal-chamber'));
+  assert.equal(bed.parent.parent,worldObjects.binding('castle:keep'));
+  const origin=bed.position.clone();bed.getWorldPosition(origin);
+  assert.deepEqual(worldAnchor(id,'floor').position,origin.toArray());
+  assert.equal(castle.root.getObjectByName(bed.name),bed);
+  const batch=bed.children.find(mesh=>mesh.isInstancedMesh);
+  assert.equal(worldObjects.lookupInstance(batch,0).objectId,id);
+  assert.ok(worldObjects.list({regionId:'region:castle',type:'room'}).length>=40);
+  assert.ok(worldObjects.binding('castle:room:feeding-stores'));
+  assert.ok(worldObjects.binding('castle:room:watch-east')!==worldObjects.binding('castle:room:watch-west'));
 });

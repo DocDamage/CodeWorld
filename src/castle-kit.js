@@ -1,3 +1,4 @@
+import {castleRoom} from './castle-objects.js';
 import * as T from 'three';
 import {Builder,v,tint,label} from './model.js';
 import {placedFire} from './fire.js';
@@ -5,7 +6,7 @@ import {placedFire} from './fire.js';
 export const stone='#aaa596',trim='#beb49f',darkStone='#676b69',slate='#3d5660',gold='#aa8951',red='#713f49';
 export class CastleKit {
   constructor(root){
-    this.root=root;this.b=new Builder(root);this.surfaces=[];this.blocks=[];this.spirals=[];this.zones=[];this.flags=[];
+    this.root=root;this.b=new Builder(root);this.surfaces=[];this.blocks=[];this.spirals=[];this.zones=[];this.flags=[];this.effectRoots=[];
   }
   box(x,y,z,w,h,d,c=stone,material='masonry'){
     this.b.put('box',c,x,y,z,w,h,d,0,0,0,material);
@@ -63,9 +64,15 @@ export class CastleKit {
   plaque(text,x,y,z,a=0,w=1.9){
     this.b.group(x,y,z,a,()=>{this.box(0,0,0,w,.34,.08,'#3e504b','agedWood');for(const s of [-1,1])this.b.put('ball','#343936',s*(w*.5-.10),0,.052,.038,.038,.022,0,0,0,'iron');label(this.root,this.b,text,'#dfc99d',0,0,.046,w-.1,.26);});
   }
-  room(name,x1,x2,z1,z2,base,top){this.zones.push({name,x1,x2,z1,z2,base,top});}
+  room(name,x1,x2,z1,z2,base,top,priority=false,key=null){
+    const zone={name,x1,x2,z1,z2,base,top,key};this.zones[priority?'unshift':'push'](zone);castleRoom(this,zone);
+  }
+  roomAt(x,z,y){return this.zones.find(o=>x>=o.x1&&x<=o.x2&&z>=o.z1&&z<=o.z2&&y>=o.base-.17&&y<o.top);}
   furnishing(x,z,base,w,d,fn,a=0,h=1){
-    this.b.group(x,base,z,a,()=>fn(this.b));const cs=Math.abs(Math.cos(a)),sn=Math.abs(Math.sin(a));
+    const room=this.roomAt(x,z,base);
+    const render=()=>this.b.group(x,base,z,a,()=>fn(this.b));
+    if(room?.objectId)this.b.owner(room.objectId,'furnishings',render);else render();
+    const cs=Math.abs(Math.cos(a)),sn=Math.abs(Math.sin(a));
     this.obstacle(x,z,w*cs+d*sn,w*sn+d*cs,base,base+h);
   }
   torch(x,y,z,options={}){
@@ -104,7 +111,7 @@ export class CastleKit {
     }return best;
   }
   location(x,z,y){
-    const room=this.zones.find(o=>x>=o.x1&&x<=o.x2&&z>=o.z1&&z<=o.z2&&y>=o.base-.17&&y<o.top);
+    const room=this.roomAt(x,z,y);
     if(room)return room.name;
     if(y<-6)return 'Dragon vault';if(y<-.5)return 'The dungeons';
     if(y>3.8)return 'Battlements';return 'Castle courtyard';
