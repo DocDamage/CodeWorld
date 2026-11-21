@@ -1,10 +1,12 @@
 import * as T from 'three';
 import { Builder,v,TAU,tint,pick } from './model.js';
 import { wood, cupboard, plant, candle, volume, sleepingLoft, fitWorkshop, walnut, oak, honey, brass, iron, linen } from './furnishings.js';
+import { animateFires,placedFire } from './fire.js';
 
-const halfW=4.4,halfD=4.05,loft=2.85,landing=-.95,foot=2.86,stairSide=2.78,steps=17;
+const sizes={bakery:[5.7,5.20],mill:[6.2,5.75],inn:[6.3,5.65],slate:[5.65,5.17],tower:[5.22,4.85],wind:[4.95,4.64],potter:[5.52,5.18],herb:[5.36,5.10]};
+const loft=2.85,steps=17;
 const schemes={
-  bakery:['#e1c6a1','#a35949','#7a8c77'],mill:['#d3c5ab','#627e80','#8c7e5e'],
+  bakery:['#cbb89a','#874c40','#70766a'],mill:['#9d978c','#65554b','#646259'],
   inn:['#e7c496','#9b574c','#567c70'],slate:['#d3c7ac','#4d7680','#758c7b'],
   tower:['#d9c7a4','#48667b','#8a885e'],wind:['#dbcaa5','#869066','#8c6952'],
   potter:['#e4c2a6','#b66f52','#788c89'],herb:['#d5d0ac','#5f8068','#9b7277']
@@ -22,7 +24,7 @@ function rug(scene,x,y,z,w,d,accent){
   const map=new T.CanvasTexture(c);map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
   const m=new T.Mesh(new T.PlaneGeometry(w,d),new T.MeshStandardMaterial({map,roughness:1}));m.rotation.x=-Math.PI/2;m.position.set(x,y+.011,z);m.receiveShadow=true;scene.add(m);
 }
-function entryDoor(b){
+function entryDoor(b,halfD){
   b.group(0,0,halfD-.10,Math.PI,()=>{
     b.put('arch',walnut,0,1.17,.025,1.48,2.34,.11);
     b.put('arch','#788979',0,1.11,.10,1.25,2.19,.07);
@@ -62,12 +64,16 @@ function addWindow(room,b,x,y,z,yaw,side,accent){
 }
 function ceilingLamp(b,x,top,z,drop){
   const bottom=top-drop;b.put('cyl',iron,x,top-drop*.5,z,.032,drop,.032);
-  b.put('cone',brass,x,bottom+.12,z,.68,.28,.68);
-  b.put('ball','#ffda98',x,bottom-.05,z,.31,.34,.31,0,0,0,'glow');
-  b.put('disk',brass,x,bottom-.22,z,.26,.05,.26);
+  b.put('cone','#645645',x,bottom+.16,z,.48,.24,.48);
+  b.put('disk','#57493a',x,bottom-.22,z,.40,.05,.40);
+  for(let i=0;i<6;i++){
+    const a=i*TAU/6;b.put('cyl',iron,x+Math.cos(a)*.17,bottom-.05,z+Math.sin(a)*.17,.023,.34,.023);
+  }
+  placedFire(b,x,bottom-.19,z,{width:.23,height:.33,intensity:0,embers:0});
 }
 function architecture(room,b,plot){
   const [plaster,accent,paint]=schemes[plot.id],round=plot.id==='wind';
+  const {halfW,halfD,stairSide,landing,foot}=room.bounds;
   const w=halfW*2,d=halfD*2,eave=5.18,ridge=6.55;
   // The staggered planks on both levels are actual floorboards.
   function boards(front,back,y){
@@ -80,7 +86,14 @@ function architecture(room,b,plot){
       }
     }
   }
-  boards(halfD,-halfD,0);boards(landing,-halfD,loft);
+  if(plot.id==='mill'){
+    const rows=Math.ceil(d/.58),columns=Math.ceil(w/.86),cellW=w/columns,cellD=d/rows;
+    for(let j=0;j<rows;j++)for(let i=0;i<columns;i++){
+      const x=-halfW+cellW*(i+.5),z=-halfD+cellD*(j+.5),c=Math.hypot(x+3.5,z+.9)<2?'#5a534b':'#81786b';
+      b.put('box',tint(c,.18),x,-.065,z,cellW-.021,.126,cellD-.024,0,0,0,'stone');
+    }
+  }else boards(halfD,-halfD,0);
+  boards(landing,-halfD,loft);
   for(const [x,z,a,len] of [[0,-halfD,0,w],[0,halfD,Math.PI,w],[-halfW,0,Math.PI/2,d],[halfW,0,-Math.PI/2,d]]){
     b.group(x,0,z,a,()=>{
       b.put('box',plaster,0,eave/2,0,len,eave,.15,0,0,0,'plaster');
@@ -99,13 +112,13 @@ function architecture(room,b,plot){
     const slope=Math.atan2(ridge-eave,halfW);
     b.put('box','#a6845f',s*halfW/2,(eave+ridge)/2,0,Math.hypot(halfW,ridge-eave)+.20,.18,d+.15,0,0,-s*slope, 'wood');
   }
-  for(const z of [-3.77,-1.35,1.12,3.78]){
+  for(const z of [-halfD+.28,-halfD*.34,halfD*.29,halfD-.27]){
     for(const s of [-1,1])b.beam(walnut,v(s*halfW,eave-.11,z),v(0,ridge-.14,z),.20,.20);
     wood(b,0,eave-.1,z,w,.18,.18,walnut);
     for(const s of [-1,1])b.beam(oak,v(s*(halfW-.15),eave-.81,z),v(s*(halfW-.94),eave-.10,z),.12);
   }
   wood(b,0,loft-.18,landing,w,.27,.19,walnut);
-  for(let x=-4.15;x<stairSide-.13;x+=.44)wood(b,x,loft+.43,landing,.071,.85,.08);
+  for(let x=-halfW+.25;x<stairSide-.13;x+=.44)wood(b,x,loft+.43,landing,.071,.85,.08);
   wood(b,(-halfW+stairSide)/2,loft+.87,landing,halfW+stairSide,.11,.12,honey);
   for(const x of [-3.12,1.88]){wood(b,x,loft/2,landing,.14,loft,.14,walnut);b.beam(oak,v(x,loft-.62,landing),v(x+.46,loft-.14,landing),.12);}
   for(let j=0;j<steps;j++){
@@ -116,19 +129,28 @@ function architecture(room,b,plot){
   }
   for(const x of [stairSide+.04,halfW-.12])b.beam(oak,v(x,.90,foot),v(x,loft+.91,landing),.09,.09);
   b.beam(walnut,v(stairSide+.03,-.03,foot),v(stairSide+.03,loft-.15,landing),.14,.20);
-  entryDoor(b);
+  entryDoor(b,halfD);
   addWindow(room,b,-halfW+.13,1.84,2.46,Math.PI/2,'left',accent);
   addWindow(room,b,halfW-.13,3.60,.10,-Math.PI/2,'right',accent);
   addWindow(room,b,-.95,loft+1.44,-halfD+.13,0,'rear',accent);
   framedPrint(b,-halfW+.15,1.78,-2.48,Math.PI/2,accent);
   framedPrint(b,halfW-.15,1.84,2.75,-Math.PI/2,accent);
-  b.group(0,loft,0,0,()=>sleepingLoft(b,plot,accent));
-  room.block(-2.66,-2.50,1.32,2.12,loft);room.block(-1.55,-3.32,.72,.51,loft);
-  if(plot.id==='inn')room.block(.12,-2.58,1.32,2.12,loft);
-  else room.block(plot.id==='tower'?.61:.24,-3.43,plot.id==='tower'?1.65:1.25,.67,loft);
-  room.block(2.05,-3.43,.94,.64,loft);
+  const loftBack=4.05-halfD;
+  b.group(0,loft,loftBack,0,()=>sleepingLoft(b,plot,accent));
+  room.block(-2.66,-2.50+loftBack,1.32,2.12,loft);room.block(-1.55,-3.32+loftBack,.72,.51,loft);
+  if(plot.id==='inn')room.block(.12,-2.58+loftBack,1.32,2.12,loft);
+  else room.block(plot.id==='tower'?.61:.24,-3.43+loftBack,plot.id==='tower'?1.65:1.25,.67,loft);
+  room.block(2.05,-3.43+loftBack,.94,.64,loft);
   for(const x of [-3.12,1.88])room.block(x,landing,.14,.14);
-  fitWorkshop(b,plot.id,room.block);
+  room.forge=fitWorkshop(b,plot.id,room.block,room.bounds);
+  if(plot.id==='mill'){
+    const x=-1.56,z=halfD-.64;
+    const pivot=new T.Group();pivot.position.set(x,.87,z);room.scene.add(pivot);const lever=new Builder(pivot);
+    lever.beam(iron,v(0,0,0),v(0,.73,0),.085);lever.put('ball',brass,0,.73,0,.18,.17,.16);lever.finish();
+    b.put('box','#5e5a4e',x,.37,z,.46,.75,.44,0,0,0,'stone');wood(b,x,.8,z,.51,.14,.48,walnut);
+    room.block(x,z,.50,.49);room.sluice={x,z};
+    room.scene.userData.motion.push((t,h,drive)=>pivot.rotation.z=-.67+(drive?.gate??1)*1.3);
+  }
   // A small writing nook and pegs beside the door make the front half usable too.
   b.group(-2.72,0,halfD-.45,Math.PI,()=>{cupboard(b,0,0,1.72,.63,.73,paint);plant(b,-.53,.80,0,.50,true);volume(b,.21,.80,0,.18);candle(b,.60,.80,-.07);});
   room.block(-2.72,halfD-.45,1.77,.66);
@@ -136,25 +158,28 @@ function architecture(room,b,plot){
     for(let j=-1;j<=1;j++)b.put('ball',brass,j*.39,1.71,.11,.093,.09,.15);
     b.put('box',accent,-.38,1.19,.13,.31,.92,.11,0,0,-.06);});
   ceilingLamp(b,-.52,5.02,1.73,1.80);ceilingLamp(b,1.16,loft-.15,-2.04,.38);
-  rug(room.scene,.62,0,.72,2.02,3.72,accent);rug(room.scene,.24,loft,-2.03,1.87,1.10,paint);
+  if(plot.id!=='mill')rug(room.scene,.62,0,.72,2.02,3.72,accent);
+  rug(room.scene,.24,loft,-2.03+loftBack,1.87,1.10,paint);
   return room;
 }
 
 export function makeRoom(plot){
   const scene=new T.Scene();scene.background=new T.Color('#625444');
+  const [halfW,halfD]=sizes[plot.id],stairSide=halfW-1.62,landing=4.05-halfD-.9,foot=landing+3.81;
   const obstacles=[],windows=[];
   const block=(x,z,w,d,y=0)=>obstacles.push({x,z,w,d,y});
   const motion=[];scene.userData.motion=motion;
-  const room={scene,windows,block,plot,animate:(time,hour)=>{for(const update of motion)update(time,hour);}};
+  const room={scene,windows,block,plot,bounds:{halfW,halfD,stairSide,landing,foot},entryZ:halfD-.52,
+    animate(time,hour,drive){animateFires(scene,time);for(const update of motion)update(time,hour,drive);}};
   const b=new Builder(scene);architecture(room,b,plot);b.finish();
-  const ambient=new T.HemisphereLight('#f7f4ea','#ad9984',1.47);
+  const ambient=new T.HemisphereLight('#d8d2c1','#77685a',1.2);
   const glow=new T.PointLight('#ffdaa6',16,15,2);glow.position.set(-.52,3.20,1.73);
   const under=new T.PointLight('#ffe4ba',9,11,2);under.position.set(.60,1.98,-2.24);
   const sun=new T.SpotLight('#fff0cb',65,20,1.13,.7,1.4);
   sun.position.set(-3.95,3.12,2.27);sun.target.position.set(.3,0,-.85);
   sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.bias=-.0006;sun.shadow.normalBias=.012;sun.shadow.camera.near=.15;
   scene.add(ambient,glow,under,sun,sun.target);
-  room.light=night=>{ambient.intensity=1.47-night*.59;glow.intensity=16+night*4;sun.intensity=39-night*34;under.intensity=9+night*3;};
+  room.light=(night,cloud,flash)=>{ambient.intensity=1.32-night*.57-cloud*.24+flash*.42;glow.intensity=14+night*4;sun.intensity=(41-night*35)*(1-cloud*.59)+flash*20;under.intensity=8+night*3;};
   room.nextFloor=(x,z,previous)=>{
     if(Math.abs(x)>halfW-.28||Math.abs(z)>halfD-.29)return null;
     if(plot.id==='wind'&&halfW-Math.abs(x)+halfD-Math.abs(z)<1.04)return null;

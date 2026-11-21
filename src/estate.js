@@ -1,7 +1,7 @@
 import * as T from 'three';
 
 export const estate={x:162,z:-55,y:4};
-export const trail=new T.CatmullRomCurve3([[8,1.18],[11.5,2.32],[15.5,2.80],[20,4],[29,1],[39,-6],[49,-9],[59,-1],[66,9],[77,10],[84,2],[85,-10],[96,-19],[110,-17],[120,-6],[132,-2],[144,-9],[155,-13],[161,-18],[162,-22.2]].map(([x,z])=>new T.Vector3(x,0,z)));
+export const trail=new T.CatmullRomCurve3([[19,4.7],[23,4],[29,1],[39,-6],[49,-9],[59,-1],[66,9],[77,10],[84,2],[85,-10],[96,-19],[110,-17],[120,-6],[132,-2],[144,-9],[155,-13],[161,-16.6],[162,-18.3]].map(([x,z])=>new T.Vector3(x,0,z)));
 const markers=trail.getSpacedPoints(Math.ceil(trail.getLength()/.65));
 const cells=new Map();
 for(const p of markers){const k=Math.floor(p.x/8)+','+Math.floor(p.z/8);if(!cells.has(k))cells.set(k,[]);cells.get(k).push(p);}
@@ -12,9 +12,11 @@ export function trailDistance(x,z){
   }return Math.sqrt(best);
 }
 export function moatDistance(x,z){
-  const dx=Math.abs(x-estate.x)-22.3,dz=Math.abs(z-estate.z)-20.2;
+  const dx=Math.abs(x-estate.x)-26.3,dz=Math.abs(z-estate.z)-24.2;
   return Math.hypot(Math.max(dx,0),Math.max(dz,0))+Math.min(Math.max(dx,dz),0)-3.25;
 }
+export function castleLocalToWorld(x,z,y=0){return {x:estate.x+x,y:estate.y+y,z:estate.z+z};}
+export function castleWorldToLocal(x,z,y=estate.y){return {x:x-estate.x,y:y-estate.y,z:z-estate.z};}
 function blend(a,b,t){t=Math.min(1,Math.max(0,t));return a+(b-a)*t*t*(3-2*t);}
 export function estateHeight(x,z){
   const sd=moatDistance(x,z);

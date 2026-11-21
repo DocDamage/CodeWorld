@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#263e37"><title>Briarwick · A fairytale village</title>
+<meta name="theme-color" content="#292d2b"><title>Briarwick · The Thornmere Vale</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23364b40'/%3E%3Cpath d='m5 24 8-16 2 10 5-7 7 13z' fill='%23f1db9f'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css"><script defer src="town.js"></script>
 </head><body>
@@ -10,24 +10,89 @@
 <header><div class="brand"><span class="crest" aria-hidden="true">✥</span><h1>Briarwick</h1><span id="roomName" hidden aria-live="polite"></span></div>
 <div class="top-actions"><button id="help" class="round" aria-label="How to explore" title="How to explore">?</button><button id="hide" class="round" aria-label="Hide controls" title="Hide controls (H)"><i data-icon="eye"></i></button></div></header>
 <div id="loading" role="status">Opening the valley…</div>
-<section id="timePanel" class="panel" aria-label="Time of day">
+<section id="timePanel" class="panel" aria-label="World controls">
 <div class="time-line"><span><i data-icon="sun"></i> <span id="phase">Daylight</span></span><output id="time" for="hour">12:00</output></div>
 <input id="hour" type="range" min="0" max="23.99" step=".01" value="12" aria-label="Hour of day">
-<div class="preset-row"><button data-hour="7">Dawn</button><button data-hour="12">Day</button><button data-hour="18.6">Dusk</button><button data-hour="23">Night</button></div></section>
+<div class="preset-row"><button data-hour="7">Dawn</button><button data-hour="12">Day</button><button data-hour="18.6">Dusk</button><button data-hour="23">Night</button></div>
+<label class="weather-line" for="weather"><span>Weather</span><select id="weather"><option value="auto">Cycle</option><option value="clear">Clear</option><option value="overcast">Overcast</option><option value="rain">Rain</option><option value="storm">Thunderstorm</option><option value="fog">Valley fog</option><option value="snow">Snow</option></select></label>
+<output id="weatherStatus" aria-live="polite">Overcast</output>
+<label id="tourSpeedRow" class="weather-line" for="tourSpeed" hidden><span>Tour speed</span><select id="tourSpeed">
+<option value="0">Paused</option><option value=".25">0.25×</option><option value=".5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option>
+</select></label></section>
 <nav class="panel dock" aria-label="Explore the village">
 <button id="tour" aria-pressed="false"><i data-icon="play"></i><span>Tour</span></button>
 <button id="walk" aria-pressed="false"><i data-icon="walk"></i><span>Walk</span></button>
 <span class="divider"></span><button id="places" aria-expanded="false" aria-controls="placeList"><i data-icon="pin"></i><span>Places</span><i data-icon="up"></i></button>
 <div id="placeList" hidden></div>
 </nav>
-<button id="doorAction" class="panel" hidden><kbd>E</kbd><span></span></button>
+<button id="doorAction" class="panel" hidden><kbd aria-hidden="true">E</kbd><span></span></button>
+<div id="lakeOptics" aria-hidden="true" hidden></div>
+<section id="minePanel" class="panel" aria-label="Ore railway" hidden><h2>Ore railway</h2><p id="mineCargo"></p><p id="mineHint"></p><output id="mineMessage" aria-live="polite"></output></section>
+<div id="forestLens" aria-hidden="true" hidden></div>
+<section id="huntPanel" class="panel" aria-label="Woodland hunting" hidden>
+<h2 id="huntArea">Alder Glade</h2>
+<div class="lake-kit"><button type="button" id="huntGlass" aria-pressed="true">Binoculars</button><button type="button" id="huntRifle" aria-pressed="false">Hunting rifle</button></div>
+<div class="hunt-actions"><button type="button" id="huntAim">Raise binoculars</button><button type="button" id="huntFire" hidden>Fire</button></div>
+<output id="huntMessage" aria-live="polite"></output><details><summary>Wildlife journal · <span id="huntCount"></span></summary><div id="huntRecords"></div></details>
+</section>
+<section id="lakePanel" class="panel" aria-label="Lake equipment" hidden>
+<div class="lake-kit" role="group" aria-label="Equipment">
+<button type="button" data-lake-tool="rod" aria-pressed="true">Rod</button>
+<button type="button" data-lake-tool="glass" aria-pressed="false">Binoculars</button>
+<button type="button" data-lake-tool="stone" aria-pressed="false">Stone</button>
+</div>
+<p id="lakeHint"></p>
+<div id="reelDrag" class="lake-kit"><button type="button" id="dragLess" aria-label="Loosen reel drag">−</button><output id="dragSetting">Drag 90%</output><button type="button" id="dragMore" aria-label="Tighten reel drag">+</button></div>
+<div id="lakeBoatControls" hidden><div class="lake-kit" role="group" aria-label="Propulsion">
+<button type="button" data-lake-drive="sail">Sail</button><button type="button" data-lake-drive="motor">Motor</button><button type="button" data-lake-drive="oars">Oars</button>
+</div><p id="lakeWind"></p><button type="button" id="lakeAnchor">Drop anchor</button></div>
+<button type="button" id="lakeUse">Cast line</button>
+<div id="lakeFight" hidden>
+<div class="line-readout"><span>Line tension</span><span id="lakePull"></span></div>
+<div id="lineTension" role="meter" aria-label="Line tension" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i aria-hidden="true"></i></div>
+<p id="lakeTensionState" role="status"></p><button type="button" id="lakeReel" aria-pressed="false">Hold to reel</button>
+</div>
+<output id="lakeMessage" aria-live="polite"></output>
+<details id="lakeNotes"><summary>Field notes</summary><div id="lakeRecords"></div></details>
+</section>
+<section id="farmPanel" class="panel" aria-label="Farm work" hidden>
+<h2 id="farmTaskTitle">Farm supplies</h2><p id="farmTaskDetail"></p><p id="farmStock"></p>
+<output id="farmMessage" aria-live="polite" hidden></output>
+<div id="tractorControls" hidden><button id="tractorHitch" type="button">Hitch wagon</button><button id="exitTractor" type="button">Exit tractor</button></div>
+</section>
 <div class="hint" id="hint">Drag to orbit <span>·</span> Scroll to zoom</div>
 <div id="pad" hidden><button data-key="KeyW" aria-label="Step forward">↑</button><button data-key="KeyA" aria-label="Step left">←</button><button data-key="KeyS" aria-label="Step back">↓</button><button data-key="KeyD" aria-label="Step right">→</button></div>
 <button id="show" class="round" aria-label="Show controls" title="Show controls (H)" hidden><i data-icon="eye"></i></button>
+<dialog id="smithy" aria-labelledby="smithTitle">
+  <div class="guide-head"><h2 id="smithTitle">Brook Armory forge</h2><button type="button" class="round" id="closeSmithy" aria-label="Leave forge">×</button></div>
+  <h3>Smelting hearth</h3>
+  <p>Two pieces of matching ore make one bar. Unload your cart at the rail yard to stock the forge.</p>
+  <table><thead><tr><th scope="col">Metal</th><th scope="col">Ore</th><th scope="col">Bars</th><th scope="col">Smelt</th></tr></thead><tbody id="smithMetals"></tbody></table>
+  <h3>Tool anvil</h3><div id="smithRecipes"></div>
+  <output id="smithResult" role="status" aria-live="polite"></output>
+</dialog>
 <dialog id="guide"><div class="guide-head"><h2>Explore Briarwick</h2><button class="round" id="closeHelp" aria-label="Close help">×</button></div>
 <p><b>Overlook</b> Drag to orbit. Scroll or pinch to zoom.</p>
-<p><b>Walk</b> Move with WASD, the arrow keys, or the on-screen arrows. Drag the view to look around. Walk up to a front door and press E or tap its name to enter. The stairs lead to the loft. Follow the sign by the Bindery for the woodland trail to Thornmere Castle. Use E or tap at either winch to operate the drawbridge.</p>
-<p><b>Tour</b> Follow the village from daylight to lantern light. Choose a place to visit it directly.</p>
+<p><b>Walk</b> Move with WASD, the arrow keys, or the on-screen arrows. Drag to look. Press E or tap the prompt at doors, the armory sluice, the drawbridge winches, or Aurelith’s vault.</p>
+<p><b>Alder Lake</b> Find the jetty in Places or walk south from the village. Select a rod, binoculars, or stone with 1–3. Press F or tap the action to cast, raise the binoculars, or throw. A low throw skips farther. Hold a creature in your binoculars to record a sighting.</p>
+<p><b>Playing a fish</b> Set the hook when the float dips. Hold F, X / □, or the reel button to wind in. Use [ and ] to loosen or tighten drag, or D-pad left and right during a fight. Ease the drag to let a running fish take line. Tighten it as the fish tires to gain line. A straining line can snap. Too much slack lets the fish shake the hook.</p>
+<p><b>Woodland hunting</b> Find 20 species across four forest habitats. Select binoculars with 1 or the hunting rifle with 2. B raises or lowers the optics. F fires the equipped rifle. Walk up to downed game and press E to collect it. On a controller, bumpers switch equipment, D-pad up toggles optics, and X / □ fires.</p>
+<p><b>Sailing</b> Board or dock with E at the jetty. Steer with A and D. Under sail, W sheets in and S eases out. Sail across the wind or tack to make headway upwind. With the motor or oars, W and S drive forward or astern. Drop anchor to fish. On a controller, use the bumpers for equipment, X / □ to use it, and D-pad right for propulsion and D-pad down for the anchor.</p>
+<p><b>Weather</b> Let weather cycle through the valley or select a condition. Rain raises the brook and speeds up the armory wheel.</p>
+<p><b>Farm work</b> Use the action prompt at field signs, troughs, and nests. Water planted rows from the can or let rain soak them. Refill at the tower. At the tractor, use the movement controls to drive. Press E or A / × for the plow, R or X / □ to hitch the wagon, and Escape or B / ○ to dismount.</p>
+<p><b>Controller</b> Use the left stick to move, right stick to look, and press the left stick to sprint. A / × interacts, B / ○ goes back, and Y / △ toggles Walk. Use the D-pad in menus, triggers to zoom in Overlook, View for Places, and Menu / Options for settings.</p>
+<p><b>Tour</b> Choose Walk here, press Escape, or use B / ○ to take control at the current stop. Open-water stops put you aboard the sailboat. Choose Resume tour to return to the same moment and speed. Adjust Tour speed with [ and ] or the controller bumpers. Choose Restart tour in Places to return to the first shot.</p>
+<p><b>Ore railway</b> The mine opens off the Nameless Sanctum at the bottom of the Briar Crypts. Use E or the action prompt at a vein with the cart nearby. Board the cart and drive forward to bring the load to the blacksmith, or reverse to go back underground. Dismount at the yard and unload. Your ore goes into storage at Brook Armory. Inside, press E at the hearth or anvil to smelt bars and forge tools. Crafted tools equip automatically.</p>
 <p><b>Shortcuts</b> Press H to hide the controls. Escape steps outside from an interior or returns to the overlook from the village.</p></dialog>
+<dialog id="dragonTalk" aria-labelledby="dragonSpeaker"><div class="guide-head"><h2 id="dragonSpeaker">Aurelith</h2><button class="round" id="closeTalk" aria-label="End conversation">×</button></div><p id="dragonText" aria-live="polite"></p><div id="dragonChoices"></div><p id="dragonFriend" hidden>Aurelith considers you a friend.</p></dialog>
+<dialog id="controllerMenu" aria-labelledby="controllerTitle"><div class="guide-head"><h2 id="controllerTitle">Controller</h2><button class="round" id="closeController" aria-label="Resume exploring">×</button></div>
+<div id="controllerControls"><button id="padPlaces" type="button">Places</button><button id="padWalk" type="button">Toggle Walk</button><button id="padTour" type="button">Start tour</button>
+<label for="padTourSpeed">Tour speed <select id="padTourSpeed"></select></label>
+<label for="padHour">Time of day <input id="padHour" type="range" min="0" max="23.5" step=".5" value="12"></label>
+<label for="padWeather">Weather <select id="padWeather"></select></label>
+<label for="padSensitivity">Look sensitivity <input id="padSensitivity" type="range" min=".55" max="2.15" step=".1" value="1.05"></label>
+<label for="padInvert">Invert vertical look <input id="padInvert" type="checkbox"></label>
+<label for="padRumble">Vibration <input id="padRumble" type="checkbox" checked></label>
+<button id="padHelp" type="button">Controls</button><button id="padHud" type="button">Toggle HUD</button></div></dialog>
 <noscript>Enable JavaScript to enter Briarwick.</noscript>
 </body></html>

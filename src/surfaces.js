@@ -8,24 +8,41 @@ for(let i=0;i<hash.length;i++)hash[i]=rand();
 function noise(x,y,fx,fy) {
   const xx=x*fx/n,yy=y*fy/n,ix=Math.floor(xx),iy=Math.floor(yy);
   let u=xx-ix,w=yy-iy;u*=u*(3-2*u);w*=w*(3-2*w);
-  const at=(a,b)=>hash[((b%fy)*73%n)*n+((((a%fx)+fx)%fx)*61%n)];
+  const at=(a,b)=>hash[(((b%fy+fy)%fy)*73%n)*n+(((a%fx+fx)%fx)*61%n)];
   return (1-w)*((1-u)*at(ix,iy)+u*at(ix+1,iy))+w*((1-u)*at(ix,iy+1)+u*at(ix+1,iy+1));
 }
 function texture(kind) {
-  const c=document.createElement('canvas');c.width=c.height=n;const ctx=c.getContext('2d'),im=ctx.createImageData(n,n);
+  const c=document.createElement('canvas'),heightCanvas=document.createElement('canvas'),roughCanvas=document.createElement('canvas');
+  c.width=c.height=heightCanvas.width=heightCanvas.height=roughCanvas.width=roughCanvas.height=n;
+  const ctx=c.getContext('2d'),heightCtx=heightCanvas.getContext('2d'),roughCtx=roughCanvas.getContext('2d');
+  const im=ctx.createImageData(n,n),heightImage=heightCtx.createImageData(n,n),roughImage=roughCtx.createImageData(n,n);
   for(let y=0;y<n;y++)for(let x=0;x<n;x++){
     const w=y/n,broad=noise(x,y,5,5),fine=noise(x,y,25,25);
-    let value=218+24*broad+10*fine,blue=0;
+    let value=218+24*broad+10*fine,red=0,green=0,blue=0,heightValue=116+66*broad+34*fine,roughness=228;
     if(kind==='plaster'){
-      const stain=noise(x,y,13,3);value=212+31*broad+10*fine-17*(1-smooth(w/.24))*stain;
+      const stain=noise(x,y,13,3),lime=noise(x,y,3,11);
+      value=214+26*broad+9*fine-19*(1-smooth(w/.24))*stain;red=4;green=1;blue=-7;
+      heightValue=150+33*broad+17*fine+8*lime;roughness=232-12*fine;
     }else if(kind==='wood'){
       const grain=noise(x,y,70,4)*.48+noise(x+10*Math.sin(w*6.28),y,20,2)*.52;
-      value=144+83*grain+22*broad;
+      const seam=Math.min(x%n,n-x%n)<2?-.18:0;
+      value=151+72*grain+19*broad+seam*80;red=8;green=-1;blue=-12;
+      heightValue=91+118*grain+14*broad+seam*60;roughness=211+20*(1-grain);
     }else if(kind==='clay'){
-      value=177+53*broad+22*fine;blue=4*(broad-.5);
-    }else if(kind==='stone'){value=182+49*broad+16*fine;}
+      const pit=noise(x,y,31,31);value=184+43*broad+17*fine-12*(pit>.74);red=8;green=-2;blue=-11+4*(broad-.5);
+      heightValue=126+72*broad+27*fine-26*(pit>.74);roughness=222+13*pit;
+    }else if(kind==='stone'){
+      const mineral=noise(x+31,y-17,19,19);value=183+42*broad+14*fine;red=2;green=1;blue=-5+6*mineral;
+      heightValue=112+82*broad+32*fine;roughness=229-17*mineral;
+    }else if(kind==='iron'){
+      const pitting=noise(x,y,39,39),oxidation=noise(x+8,y-13,8,8);
+      value=154+34*broad+15*fine-25*(pitting>.72);red=8*oxidation;green=-3;blue=-7;
+      heightValue=105+70*broad+20*fine-42*(pitting>.72);roughness=160+51*oxidation;
+    }
     const k=(y*n+x)*4,grain=(rand()-.5)*(kind==='plaster'?14:22);
-    im.data[k]=value+grain;im.data[k+1]=value+grain;im.data[k+2]=value+grain+blue;im.data[k+3]=255;
+    im.data[k]=value+grain+red;im.data[k+1]=value+grain+green;im.data[k+2]=value+grain+blue;im.data[k+3]=255;
+    heightImage.data[k]=heightImage.data[k+1]=heightImage.data[k+2]=heightValue;heightImage.data[k+3]=255;
+    roughImage.data[k]=roughImage.data[k+1]=roughImage.data[k+2]=roughness;roughImage.data[k+3]=255;
   }
   ctx.putImageData(im,0,0);
   if(kind==='canopy'){
@@ -43,11 +60,51 @@ function texture(kind) {
       ctx.fillStyle='rgba(118,111,95,'+(.15+rand()*.19)+')';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+10,y-1);ctx.lineTo(x+9,y-5);ctx.lineTo(x+2,y-5);ctx.closePath();ctx.fill();
     }
   }
-  const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.anisotropy=4;
-  return new T.MeshStandardMaterial({map:tex,roughness:.91,bumpMap:tex,bumpScale:.010});
+  heightCtx.putImageData(heightImage,0,0);roughCtx.putImageData(roughImage,0,0);
+  const tex=new T.CanvasTexture(c),bump=new T.CanvasTexture(heightCanvas),roughnessMap=new T.CanvasTexture(roughCanvas);
+  for(const map of [tex,bump,roughnessMap]){map.wrapS=map.wrapT=T.RepeatWrapping;map.anisotropy=4;}
+  tex.colorSpace=T.SRGBColorSpace;
+  const settings={
+    plaster:{roughness:.91,bumpScale:.014},wood:{roughness:.84,bumpScale:.028},clay:{roughness:.88,bumpScale:.022},
+    stone:{roughness:.94,bumpScale:.038},canopy:{roughness:.98,bumpScale:.012},iron:{roughness:.58,bumpScale:.018,metalness:.42}
+  }[kind]||{roughness:.92,bumpScale:.015};
+  return new T.MeshStandardMaterial({map:tex,bumpMap:bump,roughnessMap, ...settings});
 }
 function smooth(t){t=Math.min(1,Math.max(0,t));return t*t*(3-2*t);}
-export const surfaces={plaster:texture('plaster'),wood:texture('wood'),clay:texture('clay'),stone:texture('stone'),canopy:texture('canopy')};
+export const surfaces={plaster:texture('plaster'),wood:texture('wood'),clay:texture('clay'),stone:texture('stone'),canopy:texture('canopy'),iron:texture('iron')};
+// Each stalk contributes to both albedo and relief. Wrapped ends keep a roof course seamless.
+function reedMaterial(){
+  const size=256,color=document.createElement('canvas'),relief=document.createElement('canvas');
+  color.width=color.height=relief.width=relief.height=size;
+  const paint=color.getContext('2d'),bump=relief.getContext('2d');
+  paint.fillStyle='#715536';bump.fillStyle='#565656';
+  for(const ctx of [paint,bump])ctx.fillRect(0,0,size,size);
+  for(let i=0;i<3300;i++){
+    const x=rand()*size,y=rand()*size,length=14+rand()*55,bend=(rand()-.5)*5;
+    const light=36+rand()*36;
+    paint.fillStyle='hsl(39, '+(24+rand()*18)+'%, '+light+'%)';
+    const h=72+Math.round(light*1.7);bump.fillStyle='rgb('+h+','+h+','+h+')';
+    const width=.6+rand()*1.5;
+    for(const dx of (x<5?[0,size]:x>size-5?[0,-size]:[0])){
+      for(const dy of (y+length>=size?[0,-size]:[0]))for(const ctx of [paint,bump]){
+        ctx.beginPath();ctx.moveTo(x+dx,y+dy);
+        ctx.lineTo(x+dx+width,y+dy+.3);ctx.lineTo(x+dx+bend*.3+width,y+dy+length*.55);
+        ctx.lineTo(x+dx+bend,y+dy+length);ctx.lineTo(x+dx+bend*.3,y+dy+length*.55);ctx.closePath();ctx.fill();
+      }
+    }
+  }
+  const map=new T.CanvasTexture(color),bumpMap=new T.CanvasTexture(relief);
+  for(const t of [map,bumpMap]){t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=8;}
+  map.colorSpace=T.SRGBColorSpace;
+  return new T.MeshStandardMaterial({map,bumpMap,bumpScale:.023,roughness:.96,vertexColors:true,side:T.DoubleSide});
+}
+surfaces.thatch=reedMaterial();
+surfaces.roadStone=surfaces.stone.clone();
+surfaces.roofTile=surfaces.clay.clone();
+surfaces.agedWood=surfaces.wood.clone();
+surfaces.roadStone.roughness=.88;surfaces.roadStone.bumpScale=.055;
+surfaces.roofTile.roughness=.86;surfaces.roofTile.bumpScale=.030;
+surfaces.agedWood.roughness=.91;surfaces.agedWood.bumpScale=.036;
 export function glazing(){
   const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d');
   const g=ctx.createLinearGradient(0,0,14,64);g.addColorStop(0,'#94b6ad');g.addColorStop(.44,'#b9c7b3');g.addColorStop(.48,'#829384');g.addColorStop(1,'#c2ad85');ctx.fillStyle=g;ctx.fillRect(0,0,64,64);
@@ -58,21 +115,37 @@ export function glazing(){
 
 function masonryMaterial(){
   const c=document.createElement('canvas');c.width=512;c.height=256;const g=c.getContext('2d');
-  g.fillStyle='#a39e93';g.fillRect(0,0,512,256);
-  for(let j=0;j<8;j++)for(let i=-1;i<8;i++){
-    const x=i*68+(j%2)*34,y=j*32,n=Math.round(216+14*Math.sin(i*31+j*19));
-    g.fillStyle='rgb('+n+','+(n-2)+','+(n-6)+')';g.fillRect(x+1,y+1,66,30);
-    g.fillStyle='#ffffff25';g.fillRect(x+2,y+2,63,2);g.fillStyle='#38362626';g.fillRect(x+2,y+28,63,2);
+  g.fillStyle='#8e897e';g.fillRect(0,0,512,256);
+  for(let j=0;j<8;j++){
+    let left=-32*(j%2);
+    for(let i=0;i<8;i++){
+      const right=(i+1)*64-32*(j%2)+(i===7?0:Math.sin(i*21+j*5)*12);
+      const y=j*32,light=195+rand()*30,chip=2+rand()*5;
+      for(const offset of [0,512]){
+        const x=left+offset,end=right+offset;
+        g.beginPath();g.moveTo(x+chip,y+1);g.lineTo(end-5,y+1.5);
+        g.lineTo(end-1,y+5);g.lineTo(end-2,y+27);g.lineTo(end-chip,y+30);
+        g.lineTo(x+3,y+30.5);g.lineTo(x+1,y+25);g.lineTo(x+1.5,y+chip);g.closePath();
+        const face=g.createLinearGradient(0,y,0,y+32);
+        for(const [at,factor] of [[0,1.06],[.12,1],[.84,.98],[1,.78]]){
+          const n=Math.round(light*factor);face.addColorStop(at,'rgb('+n+','+(n-3)+','+(n-8)+')');
+        }
+        g.fillStyle=face;g.fill();
+      }
+      left=right;
+    }
   }
   const data=g.getImageData(0,0,512,256);for(let i=0;i<data.data.length;i+=4){
     const n=(Math.random()-.5)*14;for(let j=0;j<3;j++)data.data[i+j]+=n;
   }g.putImageData(data,0,0);
   const map=new T.CanvasTexture(c);map.wrapS=map.wrapT=T.RepeatWrapping;map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
-  const mat=new T.MeshStandardMaterial({map,roughness:.94});
+  const bump=map.clone();bump.colorSpace=T.NoColorSpace;bump.needsUpdate=true;
+  const mat=new T.MeshStandardMaterial({map,bumpMap:bump,bumpScale:.045,roughness:.94});
   mat.onBeforeCompile=shader=>{shader.vertexShader=shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
     vec3 loc=(instanceMatrix*vec4(position,1.)).xyz;
     vec3 side=abs(normalize(mat3(instanceMatrix)*normal));
     vMapUv=(side.y>.7?loc.xz:(side.x>.7?loc.zy:loc.xy))/vec2(5.4,2.7);
+    vBumpMapUv=vMapUv;
   `);};return mat;
 }
 
