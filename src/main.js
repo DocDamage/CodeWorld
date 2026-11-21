@@ -550,7 +550,7 @@ function start(){
       pos.y=Math.max(pos.y,height(pos.x,pos.z)+2.0);landmark=p;fly(pos,target);
     };el('placeList').append(btn);
   }
-  const entrances=new Map([['#tour',startTour]]);
+  const entrances=new Map([['#play',enterWalk],['#tour',startTour]]);
   for(const [name,x,z,a,tilt] of [['Woodland trail',trailhead.x,trailhead.z,trailYaw,0],['Thornmere Castle',estate.x,estate.z+41,0,.10]]){
     const btn=document.createElement('button');btn.textContent=name;
     btn.onclick=()=>{

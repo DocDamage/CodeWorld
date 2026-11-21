@@ -2,6 +2,10 @@
 
 Briarwick is a playable Three.js world set in Thornmere Vale. Follow the brook from a working mill to the village, sail Alder Lake, run a farm, or descend through the crypts and ride a loaded ore cart back to the blacksmith.
 
+**[Play Briarwick in your browser](https://docdamage.github.io/CodeWorld/#play)** · **[Start the full interactive tour](https://docdamage.github.io/CodeWorld/#tour)**
+
+Play starts you on foot in the village. The tour takes you through all 61 stops. Choose **Walk here** to explore at any point, then **Resume tour** to pick up where you left off. Returning visitors can start over from **Places → Restart tour**.
+
 ## Watch the world tour
 
 [![A view across Briarwick village. Select to open the full tour video.](docs/media/tour-preview.jpg)](docs/media/briarwick-full-tour.mp4?raw=1)
