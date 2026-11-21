@@ -1,10 +1,11 @@
 import * as T from 'three';
 import {Builder,v,tint,label} from './model.js';
+import {placedFire} from './fire.js';
 
-export const stone='#c4b9a3',trim='#d7c9aa',darkStone='#86847e',slate='#426878',gold='#c6a35d',red='#92515a';
+export const stone='#aaa596',trim='#beb49f',darkStone='#676b69',slate='#3d5660',gold='#aa8951',red='#713f49';
 export class CastleKit {
   constructor(root){
-    this.root=root;this.b=new Builder(root);this.surfaces=[];this.blocks=[];this.spirals=[];this.zones=[];this.flames=[];this.flags=[];
+    this.root=root;this.b=new Builder(root);this.surfaces=[];this.blocks=[];this.spirals=[];this.zones=[];this.flags=[];
   }
   box(x,y,z,w,h,d,c=stone,material='masonry'){
     this.b.put('box',c,x,y,z,w,h,d,0,0,0,material);
@@ -30,7 +31,7 @@ export class CastleKit {
     }
     this.surfaces.push({x1,x2,z1:Math.min(zStart,zEnd),z2:Math.max(zStart,zEnd),y:from,zStart,slope:(to-from)/(zEnd-zStart)});
     for(const x of [x1+.015,x2-.015]){
-      this.b.beam('#776c59',v(x,from-.12,zStart),v(x,to-.12,zEnd),.10,.23);
+      this.b.beam('#655b4c',v(x,from-.12,zStart),v(x,to-.12,zEnd),.10,.23,'box','agedWood');
     }
   }
   // Openings are cut through the masonry, including their lintels and sills.
@@ -47,29 +48,31 @@ export class CastleKit {
       this.b.group(x,base+sill,z,axis==='x'?0:Math.PI/2,()=>{
         for(const s of [-1,1])this.b.put('box',trim,s*(w/2+.04),clear/2,0,.105,clear,thick+.09,0,0,0,'stone');
         this.b.put('box',trim,0,clear+.065,0,w+.24,.16,thick+.14,0,0,0,'stone');
+        for(const s of [-1,0,1])this.b.put('stone',tint(s?trim:stone,.07),s*w*.28,clear+.11,.03,w*.31,.18,thick*.56,0,0,s*.045,'stone');
+        if(sill<.1)this.b.put('paver','#77766f',0,.025,.04,w*.86,.055,thick*.86,0,0,0,'stone');
       });prev=hi;
     }
     along(prev,end,base,base+h);
   }
   rail(x1,z1,x2,z2,y,color='#79694f'){
     const dx=x2-x1,dz=z2-z1,n=Math.ceil(Math.hypot(dx,dz)/1.35);
-    for(let i=0;i<=n;i++)this.box(x1+dx*i/n,y+.49,z1+dz*i/n,.10,.98,.10,color,'wood');
-    for(const h of [.48,.95])this.b.beam(color,v(x1,y+h,z1),v(x2,y+h,z2),.087);
+    for(let i=0;i<=n;i++){this.box(x1+dx*i/n,y+.49,z1+dz*i/n,.10,.98,.10,color,'agedWood');this.b.put('ball','#343936',x1+dx*i/n,y+.86,z1+dz*i/n,.032,.032,.032,0,0,0,'iron');}
+    for(const h of [.48,.95])this.b.beam(color,v(x1,y+h,z1),v(x2,y+h,z2),.087,.087,'box','agedWood');
     this.obstacle((x1+x2)/2,(z1+z2)/2,Math.abs(dx)+.055,Math.abs(dz)+.055,y,y+1.0);
   }
   plaque(text,x,y,z,a=0,w=1.9){
-    this.b.group(x,y,z,a,()=>{this.box(0,0,0,w,.34,.08,'#485e58','wood');label(this.root,this.b,text,'#f5dc9e',0,0,.046,w-.1,.26);});
+    this.b.group(x,y,z,a,()=>{this.box(0,0,0,w,.34,.08,'#3e504b','agedWood');for(const s of [-1,1])this.b.put('ball','#343936',s*(w*.5-.10),0,.052,.038,.038,.022,0,0,0,'iron');label(this.root,this.b,text,'#dfc99d',0,0,.046,w-.1,.26);});
   }
   room(name,x1,x2,z1,z2,base,top){this.zones.push({name,x1,x2,z1,z2,base,top});}
   furnishing(x,z,base,w,d,fn,a=0,h=1){
     this.b.group(x,base,z,a,()=>fn(this.b));const cs=Math.abs(Math.cos(a)),sn=Math.abs(Math.sin(a));
     this.obstacle(x,z,w*cs+d*sn,w*sn+d*cs,base,base+h);
   }
-  torch(x,y,z){
-    this.b.put('cyl','#545047',x,y-.22,z,.13,.51,.13);
-    this.b.put('cone','#9e7950',x,y+.02,z,.28,.27,.28,0,0,Math.PI);
-    this.b.put('leaf','#ffd07a',x,y+.27,z,.19,.43,.19,0,0,0,'glow');
-    this.flames.push(v(x,y+.27,z));
+  torch(x,y,z,options={}){
+    this.b.put('cyl','#3d423f',x,y-.22,z,.13,.51,.13,0,0,0,'iron');
+    this.b.put('cone','#765b42',x,y+.02,z,.28,.27,.28,0,0,Math.PI,'agedWood');
+    this.b.put('ring','#343936',x,y-.27,z,.21,.21,.32,Math.PI/2,0,0,'iron');
+    placedFire(this.b,x,y+.10,z,{width:.31,height:.58,intensity:0,embers:5,smoke:'torch',...options});
   }
   banner(x,y,z,w,h,a=0){
     this.b.group(x,y,z,a,()=>{

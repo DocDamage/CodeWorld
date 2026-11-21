@@ -1,4 +1,6 @@
 import * as T from 'three';
+import { placedFire } from './fire.js';
+import { METALS } from './smithing.js';
 import { Builder, v, TAU, pick, tint } from './model.js';
 
 export const walnut='#684530', oak='#a57449', honey='#bc915e', iron='#454640', brass='#c49a53', linen='#f1dfbc';
@@ -57,15 +59,16 @@ export function plant(b,x,y,z,s=.52,flowers=false) {
   vessel(b,x,y,z,s*.54,'#b57856');
   for(let j=0;j<7;j++){
     const a=j*2.4,r=s*(.12+.027*(j%4)),h=s*(.73+.11*(j%3)),xx=x+Math.sin(a)*r,zz=z+Math.cos(a)*r;
-    b.beam('#678252',v(x,y+s*.43,z),v(xx,y+h,zz),.015,.015,'cyl');
-    b.put('leaf',pick(['#5b8059','#819951','#586f47']),xx,y+h-.04,zz,s*.23,s*.37,s*.13,.45,a,.3);
-    if(flowers)b.put('ball',pick(['#c48891','#ded4a4','#cfafa4']),xx,y+h+.02,zz,.079,.08,.075);
+    b.beam('#678252',v(x,y+s*.43,z),v(xx,y+h,zz),.015,.015,'cyl','plant');
+    b.put('leaf',pick(['#5b8059','#819951','#586f47']),xx,y+h-.04,zz,s*.23,s*.37,s*.13,.45,a,.3,'plant');
+    if(flowers)b.put('ball',pick(['#c48891','#ded4a4','#cfafa4']),xx,y+h+.02,zz,.079,.08,.075,0,0,0,'plant');
   }
 }
 export function candle(b,x,y,z,h=.22) {
   b.put('disk',brass,x,y+.018,z,.15,.03,.15);
   b.put('cyl',linen,x,y+h/2,z,.074,h,.074);
-  b.put('ball','#ffeea6',x,y+h+.048,z,.034,.10,.034,0,0,0,'glow');
+  b.put('cyl','#382920',x,y+h+.009,z,.017,.029,.017);
+  placedFire(b,x,y+h+.01,z,{width:.09,height:.17,intensity:0,embers:0,smoke:'candle'});
 }
 function loaf(b,x,y,z,s=.48){
   b.put('ball','#c98e4d',x,y+s*.22,z,s,s*.48,s*.63);
@@ -97,7 +100,7 @@ export function shelf(b,x,y,z,w,stock) {
   }
   for(const s of [-1,1])wood(b,x+s*(w*.5-.04),y+.54,z,.078,1.45,.39,walnut);
 }
-export function hearth(b,x,z,oven=false){
+export function hearth(b,x,z,oven=false,smoke='hearth'){
   const w=oven?2.22:1.68;
   // Build the jambs and a recessed firebox so the hearth has depth from the side.
   for(const s of [-1,1])b.put('box','#aa9a80',x+s*w*.407,.66,z,w*.19,1.32,.82,0,0,0,'stone');
@@ -107,7 +110,7 @@ export function hearth(b,x,z,oven=false){
   b.put('box','#48392f',x,.71,z-.30,w*.68,1.47,.17,0,0,0,'stone');
   for(let j=0;j<6;j++)for(let k=0;k<5;k++)
     b.put('box',tint('#625044',.15),x+(k-2)*w*.115,.28+j*.18,z-.18,w*.108,.157,.07);
-  for(let j=0;j<7;j++)b.put('leaf','#ac4931',x+(j-3)*.096,.203,z+.24,.13,.06,.13,0,j,0,'glow');
+  for(let j=0;j<12;j++)b.put('leaf',tint('#883921',.43),x+(j-5.5)*.062,.215,z+.24+.08*Math.sin(j),.11,.049,.13,0,j,0,'glow');
   for(const s of [-1,1])for(let i=0;i<4;i++)b.put('paver',tint('#ac8568'),x+s*w*.375,.18+i*.23,z+.46,.24,.21,.16);
   for(let i=0;i<9;i++){
     const a=Math.PI*i/8;
@@ -116,8 +119,8 @@ export function hearth(b,x,z,oven=false){
   b.put('box','#918470',x,.075,z+.47,w+.26,.15,.65,0,0,0,'stone');
   for(let j=0;j<4;j++){
     b.put('cyl',walnut,x+(j-1.5)*.17,.23,z+.46,.13,.47,.13,Math.PI/2,.2);
-    b.put('leaf','#ed9449',x+(j-1.5)*.15,.4,z+.49,.14,.30+j%2*.1,.12,0,0,.1*j,'glow');
   }
+  placedFire(b,x,.23,z+.43,{width:oven?.95:.78,height:oven?.83:1.04,intensity:11,range:7,smoke});
 }
 function bed(b,x,z,accent) {
   wood(b,x,.37,z,1.30,.20,2.12,walnut);
@@ -133,7 +136,7 @@ function movingPart(b,x,y,z,build,update){
   anchor.matrix.copy(b.frame).multiply(new T.Matrix4().makeTranslation(x,y,z));b.root.add(anchor);
   const pivot=new T.Group();anchor.add(pivot);
   const mb=new Builder(pivot);build(mb);mb.finish();
-  b.root.userData.motion.push((time,hour)=>update(pivot,time,hour));
+  b.root.userData.motion.push((time,hour,drive)=>update(pivot,time,hour,drive));
 }
 function turningGear(b,x,y,z,r,rate,c=brass){
   movingPart(b,x,y,z,mb=>gear(mb,0,0,0,r,c),(pivot,t)=>pivot.rotation.z=t*rate);
@@ -161,14 +164,105 @@ export function sleepingLoft(b,p,accent) {
   }
   cupboard(b,2.05,-3.43,.92,.61,.65);volume(b,2.06,.72,-3.40,.11);
 }
-export function fitWorkshop(b,id,block) {
+function armory(b,block,halfW,halfD) {
+  const left=-halfW+1.55,rear=-halfD+1.35;
+  b.group(left+.24,0,rear,0,()=>hearth(b,0,0,true,'forge'));block(left+.24,rear+.18,2.48,1.55);
+  // The line shaft crosses the bays. All driven parts read the outdoor wheel angle.
+  movingPart(b,0,2.13,-1.74,mb=>{
+    mb.put('cyl',iron,0,0,0,.27,halfW*1.83,.27,0,0,Math.PI/2);
+    for(const x of [-halfW*.52,-halfW*.21,halfW*.29]){
+      mb.put('ring','#856b4e',x,0,0,.98,.98,2.1,0,Math.PI/2);
+      for(let i=0;i<8;i++){
+        const a=i*Math.PI/4;
+        mb.put('box',iron,x,.54*Math.cos(a),.54*Math.sin(a),.20,.18,.14,a);
+      }
+    }
+  },(pivot,t,h,drive)=>{pivot.rotation.x=-(drive?.angle??0);});
+  for(const x of [-halfW*.82,-halfW*.23,halfW*.32]){
+    wood(b,x,1.04,-1.74,.16,2.08,.18,walnut);b.put('box',iron,x,2.13,-1.74,.21,.36,.34);
+    block(x,-1.74,.16,.18);
+  }
+  const stationX=left+1.15,stationZ=-.92;
+  b.group(stationX,0,stationZ,0,()=>{
+    b.put('box','#60554a',0,.19,0,1.26,.38,1.04,0,0,0,'stone');
+    b.put('barrel','#66503f',0,.65,0,.77,.68,.72,0,0,0,'wood');
+    b.put('box',iron,0,1.04,0,.97,.17,.42);
+    b.put('box','#717171',.12,1.15,0,.52,.096,.36);
+    for(const x of [-.58,.58])wood(b,x,1.54,-.47,.16,2.85,.18,walnut);
+    wood(b,0,2.85,-.47,1.46,.20,.25,walnut);
+    movingPart(b,0,1.62,-.47,mb=>{
+      mb.put('box',walnut,0,.0,.24,.18,.24,.73);
+      mb.put('box','#5b5f5c',0,-.13,.48,.31,.29,.35);
+      mb.put('box','#7f8078',0,-.30,.50,.29,.075,.29);
+    },(pivot,t,h,drive)=>{
+      const phase=((drive?.angle??0)*2.2)%(Math.PI*2);
+      pivot.rotation.x=-.53*Math.pow(Math.max(0,Math.sin(phase)),.70)+.24*Math.pow(Math.max(0,-Math.sin(phase)),7);
+    });
+  });
+  block(stationX,stationZ,1.35,1.11);
+  const grindX=halfW*.36,grindZ=rear+.36;
+  b.group(grindX,0,grindZ,0,()=>{
+    for(const x of [-.63,.63])wood(b,x,.58,0,.14,1.24,.75,walnut);
+    b.put('box',iron,0,.85,0,1.47,.10,.82);
+    movingPart(b,0,1.05,0,mb=>{
+      mb.put('disk','#92948c',0,0,0,1.22,.22,1.22,0,0,Math.PI/2,'stone');
+      mb.put('ring','#716d61',-.13,0,0,.89,.89,1.1,0,Math.PI/2);
+      for(let i=0;i<8;i++){const a=i*Math.PI/4;mb.put('box',iron,-.13,.39*Math.sin(a),.39*Math.cos(a),.032,.18,.034,-a);}
+    },(pivot,t,h,drive)=>{pivot.rotation.x=(drive?.angle??0)*3;});
+    b.put('box','#40382c',0,.13,.49,1.34,.19,.43,0,0,0,'wood');
+  });
+  block(grindX,grindZ,1.53,1.12);
+  const rackX=halfW-1.15;
+  b.group(rackX,0,rear,-Math.PI/2,()=>{
+    table(b,0,0,2.36,.78);
+    for(const x of [-1.03,1.03])wood(b,x,1.54,-.27,.12,1.46,.13,walnut);
+    wood(b,0,2.21,-.27,2.23,.17,.14,walnut);
+    for(let i=0;i<7;i++){
+      const x=(i-3)*.28;
+      b.beam('#929795',v(x,1.37,-.19),v(x,2.07,-.19),.049,.032);
+      b.put(i%2?'ring':'arch','#93978f',x,1.36,-.18,.19,.12,.11,0,0,i*.11);
+    }
+    b.put('arch','#777f80',-.78,1.07,.12,.52,.42,.19);
+    for(let i=0;i<5;i++)b.put('paver','#5f615d',-.21+i*.23,.90,.10,.18,.14,.35,0,i*.27);
+  });
+  block(rackX,rear,.86,2.38);
+  b.group(left,0,2.35,Math.PI/2,()=>{
+    table(b,0,0,2.20,.87);cup(b,-.75,.89,.19);
+    for(let i=0;i<5;i++)b.put('box','#6b706b',i*.19-.26,.92,.06,.82,.051,.091,0,.54+i*.06);
+    vessel(b,.77,.87,.03,.36,'#69746f');
+    for(let i=0;i<7;i++)b.put('leaf','#323330',i*.15-.50,.16,.015,.16,.095,.22,i);
+  });
+  block(left,2.35,.95,2.24);
+  for(const x of [left+.10,left+.81]){
+    vessel(b,x,0,1.03,.64,'#655744');block(x,1.03,.59,.57);
+  }
+  const benchX=left+2.64,benchZ=rear-.13;
+  table(b,benchX,benchZ,1.84,.81,.86);block(benchX,benchZ,1.84,.81);
+  const ingot=new T.CylinderGeometry(.13,.16,.085,4);
+  ingot.rotateY(Math.PI/4);ingot.scale(1.35,1,.85);
+  const colors={iron:'#757f83',copper:'#b5704d',tin:'#a6abac',silver:'#d9dad1'};
+  const stacks=METALS.map((metal,column)=>{
+    const material=new T.MeshStandardMaterial({color:colors[metal],metalness:.62,roughness:.43});
+    return Array.from({length:3},(_,i)=>{
+      const bar=new T.Mesh(ingot,material);
+      bar.position.set(benchX+(column-1.5)*.41,.904+(i===2?.086:0),benchZ+(i===2?0:(i-.5)*.23));
+      bar.castShadow=bar.receiveShadow=true;bar.visible=false;b.root.add(bar);
+      return bar;
+    });
+  });
+  return {anvil:{x:stationX,z:stationZ},hearth:{x:left+.24,z:rear},
+    showBars(stock){stacks.forEach((stack,i)=>stack.forEach((bar,j)=>bar.visible=j<stock[METALS[i]]));}};
+}
+
+export function fitWorkshop(b,id,block,{halfW,halfD}) {
+  if(id==='mill')return armory(b,block,halfW,halfD);
   // Left-side counters face the central aisle. Local bounds travel with each workstation.
   function left(z,w,build,d=.79) {
-    b.group(-3.76,0,z,Math.PI/2,build);
-    block(-3.76,z,d,w);
+    const x=-halfW+.64;b.group(x,0,z,Math.PI/2,build);
+    block(x,z,d,w);
   }
   function back(x,w,build,d=.85) {
-    b.group(x,0,-3.49,0,build);block(x,-3.49,w,d);
+    const z=-halfD+.56;b.group(x,0,z,0,build);block(x,z,w,d);
   }
   function sideboard(stock){
     cupboard(b,0,0,2.46,.74,.88);shelf(b,0,1.36,-.12,2.35,stock);
@@ -184,13 +278,6 @@ export function fitWorkshop(b,id,block) {
       left(.09,2.65,()=>{table(b,0,0,2.65,.85);for(let j=0;j<4;j++)loaf(b,-.91+j*.57,.88,.06,.46);});
       center(-1.15,.65,1.62,.88,()=>{table(b,0,0,1.62,.88);b.put('box','#debf92',-.10,.884,.01,.73,.028,.46);loaf(b,-.15,.91,.02,.45);b.put('cyl',honey,.46,.96,.02,.12,.55,.12,Math.PI/2);vessel(b,-.57,.88,-.15,.25);});
       break;
-    case 'mill':
-      back(-1.54,2.21,()=>{table(b,0,0,2.21,1,.58);
-        for(let j=0;j<2;j++)b.put('disk',tint('#ada590'),0,.73+j*.21,0,1.40,.23,1.4,0,0,0,'stone');
-        b.put('cyl',walnut,0,1.68,0,.18,1.48,.18);turningGear(b,.75,1.69,-.15,.47,.46,oak);},1.10);
-      back(1.32,2.10,()=>{cupboard(b,0,0,2.1,.78,.88);for(let i=0;i<3;i++)bundle(b,(i-1)*.55,.93,0,.80);});
-      left(-.5,2.3,()=>{table(b,0,0,2.3,.75);vessel(b,-.62,.89,0,.44);volume(b,.36,.88,0,.15);});
-      center(-2.36,1.36,1.1,.84,()=>{bundle(b,-.27,0,.06,1.02);bundle(b,.27,0,-.12,.88);});break;
     case 'inn':
       back(-2.53,1.86,()=>hearth(b,0,0),1.42);
       back(.21,2.65,()=>{cupboard(b,0,0,2.65,.79,1.02,'#647c70');shelf(b,0,1.39,-.1,2.54,'pots');});
@@ -224,4 +311,35 @@ export function fitWorkshop(b,id,block) {
       center(-1.26,.81,1.55,.88,()=>{table(b,0,0,1.55,.88);vessel(b,-.31,.88,0,.32,'#8e9a88');b.put('cyl',walnut,-.25,1.21,0,.065,.28,.065,0,0,-.52);volume(b,.33,.88,.01,.2);});
       break;
   }
+  const storageX=halfW-1.02,storageZ=-halfD+1.48;
+  center(storageX,storageZ,1.10,2.30,()=>b.group(0,0,0,-Math.PI/2,()=>{
+    table(b,0,0,2.28,1.01);
+    switch(id){
+      case 'bakery':
+        for(let i=0;i<4;i++)loaf(b,(i-1.5)*.48,.90,Math.sin(i)*.16,.37);
+        for(const x of [-.68,.68])bundle(b,x,0,.12,.68);
+        break;
+      case 'inn':
+        for(let i=0;i<4;i++){plate(b,(i-1.5)*.48,.89,-.16,.32);cup(b,(i-1.5)*.48,.90,.17);}
+        candle(b,.07,.90,.38,.19);break;
+      case 'slate':
+        for(let i=0;i<16;i++)b.put('box',tint('#b9a98b'),-.46+i*.013,.89+i*.017,0,.53,.012,.36,0,i*.06);
+        volume(b,.61,.90,.11,.30);volume(b,.32,.90,-.24,-.17);
+        break;
+      case 'herb':
+        for(let i=0;i<7;i++)vessel(b,Math.sin(i*2)*.8,.91,Math.cos(i)*.31,.20+.016*i,pick(['#738879','#988355','#825c4b']),'bottle');
+        wood(b,0,2.11,-.25,2.28,.09,.10,walnut);
+        for(let i=0;i<6;i++){const x=(i-2.5)*.34;b.beam(iron,v(x,2.1,-.25),v(x,1.76,-.25),.016);
+          b.put('crown',tint('#6e754d'),x,1.68,-.25,.27,.28,.22,.13,i);}
+        break;
+      case 'potter':
+        for(let i=0;i<5;i++)vessel(b,(i-2)*.39,.90,Math.sin(i)*.14,.28+.034*i,pick(['#be875e','#786858','#a06d58']));
+        for(let i=0;i<3;i++)vessel(b,(i-1)*.61,0,.12,.49,'#8b6d59');break;
+      case 'tower':
+        gear(b,-.66,1.04,.06,.29,brass);gear(b,.09,1.02,-.05,.32,iron);volume(b,.74,.92,.15,-.21);break;
+      case 'wind':
+        for(let i=0;i<3;i++)bundle(b,(i-1)*.62,.88,.10,.67);
+        vessel(b,.41,0,.10,.49,'#8c7157');break;
+    }
+  }));
 }

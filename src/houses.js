@@ -3,13 +3,33 @@ import { Builder,v,TAU,tint,range,random,pick,label } from './model.js';
 import { plots,height,doorOffset } from './land.js';
 
 const timber='#544439',oak='#805a3c',trim='#655040',cream='#e7d4aa',iron='#383f39';
-export const moving=[],chimneys=[],lamps=[],clockHands=[];
+import { mountSmoke } from './smoke.js';
+import { thatchedRoof } from './thatch.js';
+export const moving=[],lamps=[],clockHands=[];
+function fieldstoneFooting(b,w,d){
+  for(const side of [-1,1])for(let i=0;i<Math.ceil(w/.42);i++){
+    const x=-w/2+(i+.5)*w/Math.ceil(w/.42),s=range(.32,.48),y=range(.05,.18);
+    b.put('stone',tint(pick(['#8f8878','#a49a84','#77766d']),.10),x,y,side*(d/2+.07),s,range(.22,.35),range(.16,.25),range(-.13,.13),range(0,TAU),0,'stone');
+  }
+  for(const side of [-1,1])for(let i=0;i<Math.ceil(d/.45);i++){
+    const z=-d/2+(i+.5)*d/Math.ceil(d/.45),s=range(.33,.49),y=range(.04,.17);
+    b.put('stone',tint(pick(['#8f8878','#a49a84','#77766d']),.10),side*(w/2+.07),y,z,range(.16,.25),range(.22,.35),s,range(-.13,.13),range(0,TAU),0,'stone');
+  }
+}
+function rainGoods(b,w,d,h){
+  for(const side of [-1,1]){
+    b.put('cyl','#464844',0,h+.035,side*(d/2+.285),.075,w+.55,.075,0,0,Math.PI/2,'iron');
+    const x=side*w*.38;
+    b.put('cyl','#414541',x,h*.48,side*(d/2+.32),.054,h-.02,.054,0,0,0,'iron');
+    b.put('cyl','#414541',x,.10,side*(d/2+.22),.055,.28,.055,side*.72,0,0,'iron');
+  }
+}
 function shingles(b,width,depth,eave,rise,color) {
   const run=depth/2+.30,length=width+.63;
 
   const rows=Math.ceil(run/.40),count=Math.ceil(length/.4),row=run/rows,tile=length/count;
   for(const side of [-1,1]) b.group(0,eave,0,-side*Math.PI/2,()=>{
-    b.put('box',trim,run*.5,rise*.5-.065,0,Math.hypot(run,rise),.12,length,0,0,-Math.atan2(rise,run),'wood');
+    b.put('box',trim,run*.5,rise*.5-.065,0,Math.hypot(run,rise),.12,length,0,0,-Math.atan2(rise,run),'agedWood');
     const elevation=x=>rise*(1-x/run)+.15*Math.sin(Math.PI*x/run);
     for(let i=0;i<rows;i++) {
       const x=(i+.55)*row,y=elevation(x),slope=-rise/run+.15*Math.PI/run*Math.cos(Math.PI*x/run),angle=Math.atan(slope);
@@ -19,36 +39,38 @@ function shingles(b,width,depth,eave,rise,color) {
         b.put('tile',tint(color,.24),x+.022,y+.041+range(0,.014),(start+end-length)/2,row*Math.hypot(1,slope)*1.12,.095,end-start-.008,0,0,angle);
       }
     }
-    for(const end of [-1,1]) b.beam(trim,v(0,rise+.012,end*length/2),v(run,0,end*length/2),.12,.14);
+    for(const end of [-1,1]) b.beam(trim,v(0,rise+.012,end*length/2),v(run,0,end*length/2),.12,.14,'box','agedWood');
   });
-  for(let i=0;i<count;i++)b.put('cyl',tint(color,.15),(i+.5-count/2)*tile,eave+rise+.07,0,.24,tile*.99,.24,0,0,Math.PI/2);
+  for(let i=0;i<count;i++)b.put('cyl',tint(color,.15),(i+.5-count/2)*tile,eave+rise+.07,0,.24,tile*.99,.24,0,0,Math.PI/2,'roofTile');
 }
 function flowerBox(b,x,y,z,width) {
   b.put('box',oak,x,y-.07,z+.11,width+.16,.20,.32);
   for(let j=0;j<9;j++){
     const xx=x+range(-.46,.46)*width,zz=z+range(.06,.26);
-    b.put('leaf',pick(['#59753e','#69884a','#3f6343']),xx,y+.07,zz,.21,.19,.2);
+    b.put('leaf',pick(['#59753e','#69884a','#3f6343']),xx,y+.07,zz,.21,.19,.2,0,0,0,'plant');
     b.put('ball',pick(['#d67e86','#f1d496','#ba5a71','#ede3cc']),xx,y+range(.14,.23),zz,.085,.08,.09);
   }
 }
 function windowBox(b,x,y,z,w=.74,h=.94,shutters=true,flowers=false) {
-  b.put('box',timber,x,y,z+.035,w+.16,h+.17,.13);
+  b.put('box',timber,x,y,z+.035,w+.16,h+.17,.13,0,0,0,'agedWood');
   b.put('box','#faf9ed',x,y,z+.105,w,h,.043,0,0,0,'glass');
-  b.put('box',trim,x,y,z+.15,.055,h,.06);b.put('box',trim,x,y,z+.15,w,.055,.06);
-  b.put('box','#937452',x,y-h*.5-.08,z+.08,w+.28,.10,.23);
+  b.put('box',trim,x,y,z+.15,.055,h,.06,0,0,0,'agedWood');b.put('box',trim,x,y,z+.15,w,.055,.06,0,0,0,'agedWood');
+  b.put('box','#937452',x,y-h*.5-.08,z+.08,w+.28,.10,.23,0,0,0,'stone');
   if(shutters)for(const s of [-1,1]){
     const xx=x+s*(w*.67+.09);
-    b.put('box','#587263',xx,y,z+.048,w*.30,h+.07,.09);
-    for(let k=0;k<5;k++)b.put('box',tint('#76816a'),xx,y+(k-2)*h*.18,z+.103,w*.30,.046,.055);
+    b.put('box','#587263',xx,y,z+.048,w*.30,h+.07,.09,0,0,0,'agedWood');
+    for(let k=0;k<5;k++)b.put('box',tint('#76816a'),xx,y+(k-2)*h*.18,z+.103,w*.30,.046,.055,0,0,0,'agedWood');
+    for(const yy of [-h*.34,h*.34])b.put('ball','#343a37',xx,y+yy,z+.142,.025,.025,.016,0,0,0,'iron');
   }
   if(flowers)flowerBox(b,x,y-h*.5-.1,z+.12,w);
 }
-function chimney(b,w,d,h) {
+function chimney(b,w,d,h,forge=false) {
   const x=-w*.31,z=-d*.18,y=h+.55;
-  b.put('box','#9d7d68',x,y+1.05,z,.53,2.1,.56);
-  for(let i=0;i<9;i++)for(let j=0;j<2;j++)b.put('box',tint('#ae8973',.18),x+(j-.5)*.26,y+i*.225,z+.282,.244,.192,.028);
-  b.put('box',trim,x,y+2.12,z,.68,.17,.69);
-  const p=v(x,y+2.27,z).applyMatrix4(b.frame);chimneys.push(p);
+  b.put('box','#806f61',x,y+1.05,z,.53,2.1,.56,0,0,0,'masonry');
+  for(let i=0;i<9;i++)for(let j=0;j<2;j++)b.put('box',tint('#8e7461',.15),x+(j-.5)*.26,y+i*.225,z+.286,.244,.192,.024,0,0,0,'clay');
+  b.put('box',trim,x,y+2.12,z,.68,.17,.69,0,0,0,'stone');
+  b.put('box','#54514a',x,y+.05,z,.76,.075,.79,0,0,0,'iron');
+  mountSmoke(b.root,v(x,y+2.27,z).applyMatrix4(b.frame),forge?'forgeStack':'chimney');
 }
 function dormer(b,h,d,w,color) {
   b.group(0,h+.55,d*.31,Math.PI/2,()=>{
@@ -61,30 +83,32 @@ function dormer(b,h,d,w,color) {
 function cottage(b,p,root) {
   const {w,d,h,wall,roof,id}=p,front=d/2;
   b.put('box','#9d9580',0,-.97,0,w+.12,2.34,d+.12,0,0,0,'stone');
+  fieldstoneFooting(b,w,d);
   b.put('box',wall,0,h/2,0,w,h,d,0,0,0,'plaster');
-  b.put('gable',wall,0,h-.02,0,d,1.91,w,0,Math.PI/2,0,'plaster');
+  const thatched=['potter','herb','inn'].includes(id),rise=thatched?2.55:1.92;
+  b.put('gable',wall,0,h-.02,0,d,rise,w,0,Math.PI/2,0,'plaster');
   for(const side of [-1,1]){
     b.group(0,0,side*front,side===1?0:Math.PI,()=>{
-      for(const x of [-w/2+.04,0,w/2-.04])b.put('box',timber,x,h/2,0,.12,h+.05,.17,0,0,0,'wood');
-      for(const y of [.16,h*.49,h-.12])b.put('box',timber,0,y,0,w+.12,.14,.17);
+      for(const x of [-w/2+.04,0,w/2-.04])b.put('box',timber,x,h/2,0,.12,h+.05,.17,0,0,0,'agedWood');
+      for(const y of [.16,h*.49,h-.12])b.put('box',timber,0,y,0,w+.12,.14,.17,0,0,0,'agedWood');
       for(const x of [-w*.25,w*.25])windowBox(b,x,h*.74,.018,.71,.95,true,side===1);
       for(let k=0;k<7;k++)b.put('box',trim,(k/6-.5)*w,h-.04,.19,.115,.18,.50,.18);
     });
     b.group(side*w/2,0,0,side*Math.PI/2,()=>{
-      b.put('box',timber,0,h*.49,.025,d,.14,.13);
-      for(const z of [-d*.46,d*.46])b.put('box',timber,z,h*.5,0,.13,h,.13);
-      b.beam(timber,v(-d*.47,.25,.052),v(-d*.17,h*.46,.052),.12);
-      b.beam(timber,v(d*.47,h*.51,.052),v(d*.15,h*.96,.052),.12);
+      b.put('box',timber,0,h*.49,.025,d,.14,.13,0,0,0,'agedWood');
+      for(const z of [-d*.46,d*.46])b.put('box',timber,z,h*.5,0,.13,h,.13,0,0,0,'agedWood');
+      b.beam(timber,v(-d*.47,.25,.052),v(-d*.17,h*.46,.052),.12,.12,'box','agedWood');
+      b.beam(timber,v(d*.47,h*.51,.052),v(d*.15,h*.96,.052),.12,.12,'box','agedWood');
       windowBox(b,0,h*.7,.055,.69,.91,false);
       windowBox(b,0,h+ .46,.04,.54,.57,false);
-      b.put('box',timber,0,h-.02,.04,d,.13,.14);
-      for(const s of [-1,1])b.beam(trim,v(s*d*.38,h+.05,.052),v(s*.27,h+1.41,.052),.095,.115);
+      b.put('box',timber,0,h-.02,.04,d,.13,.14,0,0,0,'agedWood');
+      for(const s of [-1,1])b.beam(trim,v(s*d*.38,h+.05,.052),v(s*.27,h+1.41,.052),.095,.115,'box','agedWood');
     });
   }
   // Narrow flecks of lime plaster reveal the fieldstone at the foot of the walls.
   for(let j=0;j<18;j++){
     const x=range(-w*.47,w*.47),y=.22+Math.pow(random(),2)*h*.83;
-    b.put('leaf',tint('#c7b994'),x,y,front+.015,range(.08,.26),range(.035,.085),.018);
+    b.put('stone',tint('#8f8775'),x,y,front+.015,range(.08,.22),range(.035,.075),.025,0,0,range(-.3,.3),'stone');
   }
   const doorX=doorOffset(p);
   b.put('arch',timber,doorX,1.02,front+.1,1.01,1.97,.16);
@@ -92,16 +116,20 @@ function cottage(b,p,root) {
   windowBox(b,doorX,1.41,front+.24,.39,.35,false);
   for(let k=0;k<5;k++)b.put('box',id==='bakery'?'#506e5e':'#806748',doorX+(k-2)*.15,.65,front+.237,.012,.91,.009);
   b.put('ball','#c9aa67',doorX+.27,.8,front+.28,.095,.095,.085);
-  b.put('box','#b4aa92',doorX,.085,front+.43,1.30,.17,.75);
+  for(const yy of [.56,1.10,1.49])b.put('box','#353a37',doorX-.28,yy,front+.282,.42,.042,.025,0,0,0,'iron');
+  for(const yy of [.56,1.10,1.49])b.put('ball','#242825',doorX-.47,yy,front+.305,.045,.045,.025,0,0,0,'iron');
+  b.put('box','#8f8a7d',doorX,.085,front+.43,1.30,.17,.75,0,0,0,'stone');
   windowBox(b,-doorX,1.19,front+.02,.85,.86,true);
-  shingles(b,w,d,h,1.92,roof);
-  if(id==='bakery'||id==='inn')dormer(b,h,d,w,roof);
-  chimney(b,w,d,h);
+  if(thatched)thatchedRoof(b,w,d,h,rise);
+  else {shingles(b,w,d,h,rise,roof);rainGoods(b,w,d,h);}
+  if(id==='bakery'||id==='inn')dormer(b,h+(thatched?.46:0),d,w,roof);
+  chimney(b,w,d,h,id==='mill');
   if(id==='bakery'){
     for(let i=0;i<11;i++){
-      const xx=(i-5)*w/11,c=i%2?'#b95646':'#f1dfb5';
-      b.put('box',c,xx,2.20,front+.52,w/11+.003,.09,1.2,.23);
-      b.put('arch',c,xx,1.97,front+1.1,w/11,.25,.08,0,0,Math.PI);
+      const xx=(i-5)*w/11,c=tint(i%2?'#975d50':'#c8b79b',.10),sag=.018*Math.sin(i*1.31);
+      b.put('box',c,xx,2.203+sag,front+.52,w/11+.003,.065,1.2,.23);
+      b.put('arch',c,xx,1.98+sag,front+1.106,w/11,.228,.061,0,0,Math.PI);
+      b.put('box','#8f7861',xx-w/22,2.238+sag,front+.516,.014,.013,1.17,.23);
     }
     for(const x of [-w*.46,w*.46])b.put('cyl',oak,x,1.01,front+1.04,.085,2.02,.085);
     b.put('box',oak,w*.22,.67,front+.71,1.56,.19,.7);
@@ -120,17 +148,23 @@ function cottage(b,p,root) {
     b.put('box',timber,w*.5+.24,2.8,front,.62,.09,.1);
     b.put('box','#506b5e',w*.5+.49,2.43,front,.53,.51,.12);
     label(root,b,'INN','#fce2a4',w*.5+.49,2.43,front+.07,.44,.20);
+  } else if(id!=='tower'){
+    const sign={mill:'BROOK ARMORY',slate:'THE BINDERY',herb:'ROSEMARY HOUSE',potter:'POTTER'}[id];
+    b.put('box',iron,doorX,2.24,front+.11,2.05,.44,.14);
+    b.put('box',timber,doorX,2.24,front+.19,1.92,.33,.05,0,0,0,'wood');
+    for(const x of [-.88,.88])b.put('ball','#a48260',doorX+x,2.24,front+.225,.07,.07,.045);
+    label(root,b,sign,'#e3c99f',doorX,2.24,front+.224,1.78,.29);
   }
   barrel(b,w*.52,0,front+.38);if(id!=='tower')barrel(b,w*.51+.47,-.04,front+.15,.73);
   // Climbing vines are concentrated near the downwind corner.
   for(let j=0;j<48;j++){const y=range(.4,h),x=w*.45+.13*Math.sin(y*3)+range(-.22,.11);
-    b.put('leaf',pick(['#5d7947','#87954c','#607243']),x,y,front+.13,range(.13,.31),range(.13,.29),.11,0,0,range(-.8,.8));
+    b.put('leaf',pick(['#5d7947','#87954c','#607243']),x,y,front+.13,range(.13,.31),range(.13,.29),.11,0,0,range(-.8,.8),'plant');
   }
 }
 function barrel(b,x,y,z,s=1){
-  b.put('barrel',tint('#967450'),x,y+.35*s,z,.56*s,.7*s,.56*s);
-  for(const yy of [.15,.52])b.put('cyl',iron,x,y+yy*s,z,.55*s,.048*s,.55*s);
-  b.put('disk',oak,x,y+.70*s,z,.43*s,.026*s,.43*s);
+  b.put('barrel',tint('#967450'),x,y+.35*s,z,.56*s,.7*s,.56*s,0,0,0,'agedWood');
+  for(const yy of [.15,.52])b.put('cyl',iron,x,y+yy*s,z,.55*s,.048*s,.55*s,0,0,0,'iron');
+  b.put('disk',oak,x,y+.70*s,z,.43*s,.026*s,.43*s,0,0,0,'agedWood');
 }
 function cat(b,x,y,z){
   b.group(x,y,z,-.38,()=>{
@@ -159,7 +193,7 @@ function cat(b,x,y,z){
 function towerStone(b,r,h,taper=0) {
   for(let j=0;j<Math.floor(h*17);j++){const a=range(0,TAU),y=range(.16,h-.16);
     const radius=r-taper*y/h;
-    b.put('box',tint(pick(['#c1ae8c','#cbbb9b','#d8c8a8'])),Math.sin(a)*(radius-.012),y,Math.cos(a)*(radius-.012),range(.15,.37),range(.09,.19),.065,0,a);
+    b.put('stone',tint(pick(['#938a76','#a49a83','#7f7d72'])),Math.sin(a)*(radius-.012),y,Math.cos(a)*(radius-.012),range(.15,.34),range(.08,.17),.075,0,a,0,'stone');
   }
 }
 function roundRoof(b,base,radius,rise,color,rows) {
@@ -220,21 +254,12 @@ function sails(b){
     for(let j=0;j<8;j++){const r=1.22+j*.32;b.beam(trim,point(r,-.04,.035),point(r,.70,.035),.055,.065);}
   }
 }
-function waterwheel(b) {
-  for(const z of [-.30,.30]){
-    b.put('ring',oak,0,0,z,3.34,3.34,2.15);
-    b.put('ring',trim,0,0,z,2.84,2.84,1.1);
-    for(let i=0;i<10;i++){const a=i*TAU/10;b.beam(oak,v(0,0,z),v(1.63*Math.sin(a),1.63*Math.cos(a),z),.12,.12);}
-  }
-  for(let i=0;i<20;i++){const a=i*TAU/20;b.put('box',tint(oak),1.67*Math.sin(a),1.67*Math.cos(a),0,.34,.13,.81,0,0,-a);}
-  b.put('cyl',iron,0,0,0,.34,1.05,.34,Math.PI/2);
-}
 export function lantern(b,x,y,z) {
   b.group(x,y,z,0,()=>{
-    b.put('cyl',timber,0,1.45,0,.14,2.9,.14);b.put('box',trim,.22,2.83,0,.58,.11,.15);
+    b.put('cyl',timber,0,1.45,0,.14,2.9,.14,0,0,0,'agedWood');b.put('box',trim,.22,2.83,0,.58,.11,.15,0,0,0,'iron');
     b.put('box','#ffdf92',.44,2.44,0,.27,.40,.27,0,0,0,'glass');
-    for(const s of [-1,1])for(const t of [-1,1])b.put('box',iron,.44+s*.15,2.44,t*.15,.036,.46,.036);
-    b.put('spire',iron,.44,2.74,0,.53,.24,.53);b.put('box',iron,.44,2.21,0,.34,.06,.34);
+    for(const s of [-1,1])for(const t of [-1,1])b.put('box',iron,.44+s*.15,2.44,t*.15,.036,.46,.036,0,0,0,'iron');
+    b.put('spire',iron,.44,2.74,0,.53,.24,.53,0,0,0,'iron');b.put('box',iron,.44,2.21,0,.34,.06,.34,0,0,0,'iron');
     lamps.push(v(.44,2.43,0).applyMatrix4(b.frame));
   });
 }
@@ -243,7 +268,6 @@ export function buildings(root,b) {
     if(p.id==='wind'){windmill(b);rotor(root,b,0,5.8,1.8,'z',sails,.23);}
     else cottage(b,p,root);
     if(p.id==='tower')b.group(-2,0,.64,0,()=>clocktower(b,root));
-    if(p.id==='mill')rotor(root,b,-1.73,1.14,p.d/2+.60,'z',waterwheel,-.34);
   });
-  for(const [x,z] of [[-.2,13],[-6,5.6],[-15.6,5.1],[3.4,-4.5],[8.4,-11.4],[-16,-6],[-2.2,-8.4]])lantern(b,x,height(x,z),z);
+  for(const [x,z] of [[1.45,13],[-6,5.6],[-16.7,5.3],[3.65,-3.5],[9.1,-10.1],[-21.6,-6.3],[3.4,-14.9],[14,6.8],[-23.1,8.6],[7.7,22.8]])lantern(b,x,height(x,z),z);
 }
