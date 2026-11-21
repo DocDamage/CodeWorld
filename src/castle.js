@@ -1,3 +1,4 @@
+import {plantShrub} from './trees.js';
 import {dragonBed} from './hoard.js';
 import * as T from 'three';
 import { Builder,v,TAU,range,tint } from './model.js';
@@ -181,9 +182,9 @@ export function buildCastle(scene,waterMaterial){
   // Hang the sign overhead to leave the foot of the stair completely open.
   for(const x of [6.08,8.92])k.box(x,1.55,12.94,.13,3.10,.14,oak,'wood');
   k.plaque('Prison & dragon vault',7.5,2.92,12.95,0,2.78);
-  for(const [x,z] of [[-3.7,10.7],[-7.7,3.62],[10.6,-.77],[10.62,11]]){
+  for(const [x,z] of [[-2.1,12.6],[-7.7,3.62],[1.65,-.77],[10.62,11]]){
     k.b.put('disk','#a1957a',x,.16,z,1.32,.32,1.32);
-    k.b.put('crown',tint('#708953'),x,.69,z,1.22,.99,1.19,0,z,0,'canopy');k.obstacle(x,z,1.2,1.2,0,1.2);
+    plantShrub(k.b,x,.22,z,1.10,1.76);k.obstacle(x,z,1.2,1.2,0,1.2);
   }
   // The open well, bucket and turning drum mark the centre of the ward.
   for(let j=0;j<22;j++){const a=j*TAU/22;k.b.put('stone',tint(trim,.08),-4.8+1.03*Math.sin(a),.43,3.1+1.03*Math.cos(a),.34,.72,.25,0,a,0,'stone');}
@@ -225,7 +226,7 @@ export function buildCastle(scene,waterMaterial){
       const next=k.floorAt(lx,lz,y,extra);return next===null?null:estate.y+next;
     },
     area(x,z,y){
-      const lx=x-estate.x,lz=z-estate.z;if(Math.abs(lx)>CASTLE_LAYOUT.floorHalfX+.5||Math.abs(lz)>CASTLE_LAYOUT.floorHalfZ+.5)return 'Thornmere Castle';
+      const lx=x-estate.x,lz=z-estate.z;if(y>=estate.y-.5&&(Math.abs(lx)>CASTLE_LAYOUT.floorHalfX+.5||Math.abs(lz)>CASTLE_LAYOUT.floorHalfZ+.5))return 'Thornmere Castle';
       return k.location(lx,lz,y-estate.y);
     },
     tick(t,dt,eye,insideVillage,night,wind,viewport,walkingFloor){
