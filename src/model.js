@@ -60,11 +60,19 @@ export function registerSharedMaterial(name,material) {
 const angles = new T.Euler(), rot = new T.Quaternion();
 const unitY = v(0,1,0);
 export class Builder {
-  constructor(root) { this.root=root; this.frame=new T.Matrix4(); this.batches=new Map(); }
+  constructor(root) {
+    this.root=root;this.frame=new T.Matrix4();this.batches=new Map();
+    this.ownership={objectId:null,partId:null};
+  }
   group(x,y,z,yaw,fn) {
     const old=this.frame;
     this.frame=old.clone().multiply(new T.Matrix4().makeTranslation(x,y,z)).multiply(new T.Matrix4().makeRotationY(yaw));
     try {fn();} finally {this.frame=old;}
+  }
+  owner(objectId,partId,fn) {
+    const old=this.ownership;
+    this.ownership={objectId,partId:partId??null};
+    try{return fn();}finally{this.ownership=old;}
   }
   put(type,color,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0,material='standard') {
     if(material==='standard' && type==='tile') material='roofTile';
@@ -72,17 +80,20 @@ export class Builder {
   }
   place(type,color,pos,orientation,scale,material='standard') {
     const key=type+'-'+material;
-    if(!this.batches.has(key)) this.batches.set(key,{type,material,matrices:[],colors:[]});
+    if(!this.batches.has(key)) this.batches.set(key,{type,material,matrices:[],colors:[],owners:[],parts:[]});
     const b=this.batches.get(key);
     b.matrices.push(new T.Matrix4().compose(pos,orientation,scale).premultiply(this.frame));
     b.colors.push(new T.Color(color));
+    b.owners.push(this.ownership.objectId);
+    b.parts.push(this.ownership.partId);
   }
   beam(color,a,b,width,depth=width,type='box',material='standard') {
     const dir=b.clone().sub(a);
     this.place(type,color,a.clone().lerp(b,.5),new T.Quaternion().setFromUnitVectors(unitY,dir.clone().normalize()),v(width,dir.length(),depth),material);
   }
   finish() {
-    for(const {type,material,matrices,colors} of this.batches.values()) {
+    const meshes=[];
+    for(const {type,material,matrices,colors,owners,parts} of this.batches.values()) {
       const geometry=geometries[type],surface=materials[material];
       if(!geometry)throw new Error(`Unknown shared geometry: ${type}`);
       if(!surface)throw new Error(`Unknown shared material: ${material}`);
@@ -90,9 +101,13 @@ export class Builder {
       matrices.forEach((m,i)=>{mesh.setMatrixAt(i,m);mesh.setColorAt(i,colors[i]);});
       mesh.castShadow=material!=='glow'&&material!=='glass';mesh.receiveShadow=mesh.castShadow;
       if(mesh.material.userData.windDepth)mesh.customDepthMaterial=mesh.material.userData.windDepth;
+      mesh.userData.instanceOwners=owners;
+      mesh.userData.instanceParts=parts;
       this.root.add(mesh);
+      meshes.push(mesh);
     }
     this.batches.clear();
+    return meshes;
   }
 }
 export function meshSurface(root, positions, indices, colors, options={}) {
@@ -108,5 +123,7 @@ export function label(root,builder,text,color,x,y,z,width,height) {
   ctx.font='bold 68px Georgia';ctx.fillText(text,256,66,482);
   const map=new T.CanvasTexture(c);map.colorSpace=T.SRGBColorSpace;
   const m=new T.Mesh(new T.PlaneGeometry(width,height),new T.MeshBasicMaterial({map,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
-  m.position.set(x,y,z);m.applyMatrix4(builder.frame);root.add(m);
+  m.position.set(x,y,z);m.applyMatrix4(builder.frame);
+  if(builder.ownership?.objectId){m.userData.objectId=builder.ownership.objectId;m.userData.partId=builder.ownership.partId;}
+  root.add(m);return m;
 }

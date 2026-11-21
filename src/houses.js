@@ -5,6 +5,7 @@ import { plots,height,doorOffset } from './land.js';
 const timber='#544439',oak='#805a3c',trim='#655040',cream='#e7d4aa',iron='#383f39';
 import { mountSmoke } from './smoke.js';
 import { thatchedRoof } from './thatch.js';
+import { visualBindings,worldObjects } from './world-objects.js';
 export const moving=[],lamps=[],clockHands=[];
 function fieldstoneFooting(b,w,d){
   for(const side of [-1,1])for(let i=0;i<Math.ceil(w/.42);i++){
@@ -264,7 +265,18 @@ export function lantern(b,x,y,z) {
   });
 }
 export function buildings(root,b) {
+  if(!visualBindings.has('procedural:village/bakery'))visualBindings.register('procedural:village/bakery',{
+    kind:'procedural',build:({builder,plot,root:visualRoot})=>cottage(builder,plot,visualRoot)
+  });
   for(const p of plots)b.group(p.x,p.y,p.z,p.a,()=>{
+    if(p.id==='bakery'){
+      const group=new T.Group();group.name='world:bakery';group.position.set(p.x,p.y,p.z);group.rotation.y=p.a;
+      group.userData.assetKey='procedural:village/bakery';root.add(group);worldObjects.bindGroup('bakery',group);
+      const bakeryBuilder=new Builder(group),binding=visualBindings.get(group.userData.assetKey);
+      bakeryBuilder.owner('bakery','bakery:exterior',()=>binding.build({builder:bakeryBuilder,plot:p,root:group}));
+      bakeryBuilder.finish();
+      return;
+    }
     if(p.id==='wind'){windmill(b);rotor(root,b,0,5.8,1.8,'z',sails,.23);}
     else cottage(b,p,root);
     if(p.id==='tower')b.group(-2,0,.64,0,()=>clocktower(b,root));

@@ -71,29 +71,52 @@ const approach=(id,points)=>{
   return makeRoad([...points,...[2.15,.36].map(distance=>{const {x,z}=doorstep(plot,distance);return [x,z];})],3,id);
 };
 
+const approachPrefixes=new Map([
+  ['bakery',[[3.6,23],[5.6,22.9],[7.5,21.8]]],
+  ['mill',[[-4.7,4.3],[-4.35,6.8],[-3.9,10.1],[-4.05,14.6]]],
+  ['inn',[[2.3,3.4],[.45,2.9],[-1.8,1.6]]],
+  ['slate',[binderyBranch,[13.2,4.4]]],
+  ['tower',[north,[7.4,-10.6],[10.8,-12.1],[13.65,-12.9]]],
+  ['herb',[north,[3.9,-11.5],[2.7,-14.8]]],
+  ['wind',[west,[-22.45,.35],[-23.8,-4.2],[-23.8,-8.3]]],
+  ['potter',[west,[-23.55,7.9],[-26.35,11.05]]]
+]);
+
 export const roads = [
   makeRoad([[3,34],[4.5,27.7],[3.6,23],[.4,18.5],[.1,13],square],5),
   makeRoad([square,[-1.9,6.1],[-4.7,4.3],[eastAbutment,bridgeZ]],4),
   makeRoad([[westAbutment,bridgeZ],[-17,3.5],[-19.1,4.05],west],4),
   makeRoad([square,[2.3,3.4],[3.9,.7],[4.65,-2],[5.5,-5.45],north],4),
   makeRoad([square,[4.2,7.1],[8.6,5.85],binderyBranch,[16.7,5.6],[19,4.7]],4),
-  approach('bakery',[[3.6,23],[5.6,22.9],[7.5,21.8]]),
-  approach('mill',[[-4.7,4.3],[-4.35,6.8],[-3.9,10.1],[-4.05,14.6]]),
-  approach('inn',[[2.3,3.4],[.45,2.9],[-1.8,1.6]]),
-  approach('slate',[binderyBranch,[13.2,4.4]]),
-  approach('tower',[north,[7.4,-10.6],[10.8,-12.1],[13.65,-12.9]]),
-  approach('herb',[north,[3.9,-11.5],[2.7,-14.8]]),
-  approach('wind',[west,[-22.45,.35],[-23.8,-4.2],[-23.8,-8.3]]),
-  approach('potter',[west,[-23.55,7.9],[-26.35,11.05]])
+  ...[...approachPrefixes].map(([id,points])=>approach(id,points))
 ];
 
-const samples=roads.flatMap(({curve,lanes})=>curve.getSpacedPoints(Math.ceil(curve.getLength()/.55)).map(p=>({x:p.x,z:p.z,edge:lanes*.24})));
 const samplesByCell=new Map();
 const cellKey=(x,z)=>`${x},${z}`;
-for (const sample of samples) {
-  const key=cellKey(Math.floor(sample.x/4),Math.floor(sample.z/4));
-  if(!samplesByCell.has(key))samplesByCell.set(key,[]);
-  samplesByCell.get(key).push(sample);
+let cacheRevision=0;
+function rebuildRoadSamples(){
+  samplesByCell.clear();
+  const samples=roads.flatMap(({curve,lanes})=>curve.getSpacedPoints(Math.ceil(curve.getLength()/.55)).map(p=>({x:p.x,z:p.z,edge:lanes*.24})));
+  for (const sample of samples) {
+    const key=cellKey(Math.floor(sample.x/4),Math.floor(sample.z/4));
+    if(!samplesByCell.has(key))samplesByCell.set(key,[]);
+    samplesByCell.get(key).push(sample);
+  }
+  cacheRevision++;
+}
+rebuildRoadSamples();
+export const roadCacheRevision=()=>cacheRevision;
+export function updatePlotPlacement(id,placement){
+  const plot=plots.find(candidate=>candidate.id===id);
+  if(!plot)throw new Error(`Unknown village plot: ${id}`);
+  for(const key of ['x','y','z','a'])if(placement[key]!==undefined){
+    if(!Number.isFinite(placement[key]))throw new TypeError(`Invalid ${key} placement for ${id}`);
+    plot[key]=placement[key];
+  }
+  const prefix=approachPrefixes.get(id),road=roads.find(candidate=>candidate.destination===id);
+  if(prefix&&road)road.curve=approach(id,prefix).curve;
+  rebuildRoadSamples();
+  return plot;
 }
 export function nearPath(x,z,r) {
   const gx=Math.floor(x/4),gz=Math.floor(z/4);
