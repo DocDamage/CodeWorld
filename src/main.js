@@ -1,20 +1,22 @@
+import {createTraversal} from './traversal.js';
+import {buildDaylight} from './daylight.js';
+import {setupControllerMenu} from './controller-menu.js';
 import {buildLake} from './lake.js';
 import {sampleTour,tourDuration,tourHandoff,restoreTourCheckpoint} from './tour.js';
 import {buildHunting} from './hunting.js';
-import {forestSites} from './forest-species.js';
+import {closePlaces,installPlaces} from './places.js';
 import {buildMine} from './mine.js';
 import {buildForgePanel,describeCargo} from './forge-panel.js';
-import {minePoint} from './mine-layout.js';
-import {atLake,onLakeDock,dock,lake,falls} from './lake-layout.js';
+import {atLake,onLakeDock,dock,lake} from './lake-layout.js';
 import {waterReflections} from './water.js';
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Builder,glass,v,TAU } from './model.js';
+import { Builder,v } from './model.js';
 import { terrain,grass,bridge,plots,height,smooth,walkable,walkHeight,doorstep,farmApproach } from './land.js';
-import { buildings,moving,lamps,clockHands } from './houses.js';
+import { buildings } from './houses.js';
 import { makeRoom,makeWindowViews } from './rooms.js';
-import { estate,trailhead,trailYaw,trailDistance } from './estate.js';
+import { estate,trailDistance } from './estate.js';
 import { buildWoodland } from './woodland.js';
 import { buildCastle } from './castle.js';
 import { buildCatacomb } from './catacomb.js';
@@ -26,7 +28,7 @@ import { createWeatherCycle,weatherPresets } from './weather-cycle.js';
 import { dressVillage } from './village.js';
 import { surfaces } from './surfaces.js';
 import { buildFarm } from './farm.js';
-import { farm,inFarm,farmSheltered,farmStations } from './farm-layout.js';
+import { farm,inFarm,farmSheltered } from './farm-layout.js';
 import { waterCapacity } from './farm-state.js';
 import { buildFallingLeaves } from './foliage.js';
 import {soilSampler} from './soil.js';
@@ -38,6 +40,11 @@ import { onBridge,nearPath,riverWidth,riverX,springZ } from './layout.js';
 import { animateFires } from './fire.js';
 import { stepSmoke } from './smoke.js';
 import { createGamepadControls } from './gamepad.js';
+import { actionIds,createAction } from './actions.js';
+import { createJsonStore } from './storage.js';
+import { applyWorldPlacementOverrides,createWorldInspector,proposeWorldPlacement } from './world-objects.js';
+import { createRegionRoot } from './world-scene.js';
+import { bindCoreWorldCatalog,registerCoreWorldCatalog } from './world-catalog.js';
 
 const el=id=>document.getElementById(id);
 const icons={sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
@@ -50,6 +57,10 @@ const svg=k=>'<svg aria-hidden="true" viewBox="0 0 24 24">'+icons[k]+'</svg>';
 document.querySelectorAll('[data-icon]').forEach(n=>n.innerHTML=svg(n.dataset.icon));
 function start(){
   const scene=new T.Scene(),camera=new T.PerspectiveCamera(46,1,.08,295);
+  const store=createJsonStore(()=>window.localStorage);
+  const placementKey='briarwick-development-placements-v1';
+  applyWorldPlacementOverrides(store.read(placementKey));
+  registerCoreWorldCatalog();
   const renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
   renderer.toneMapping=T.AgXToneMapping;renderer.toneMappingExposure=1.31;
   const reflectionRoom=new RoomEnvironment(),reflectionBuilder=new T.PMREMGenerator(renderer);
@@ -66,35 +77,38 @@ function start(){
   for(const light of [hemi,sun]){light.layers.enable(1);light.layers.enable(2);light.layers.enable(3);}
   scene.add(sun.target);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);const sc=sun.shadow.camera;
   sc.left=-33;sc.right=33;sc.top=34;sc.bottom=-32;sc.near=.5;sc.far=112;sun.shadow.normalBias=.028;sun.shadow.bias=-.00018;
-  const air=atmosphere(scene),b=new Builder(scene),drive=createMillDrive(),weather=createWeatherCycle();
+  const air=atmosphere(scene),villageRoot=createRegionRoot(scene,'village'),b=new Builder(villageRoot),drive=createMillDrive(),weather=createWeatherCycle();
   const leaves=buildFallingLeaves(scene,walkHeight);
   weatherGround(surfaces.roadStone,air.uniforms,.58);
   const reflectWater=waterReflections(renderer,scene,air.waterMaterial);
   weatherGround(surfaces.thatch,air.uniforms,.90);
   weatherGround(surfaces.roofTile,air.uniforms,.80);
-  weatherGround(terrain(scene,b),air.uniforms);buildings(scene,b);bridge(b);
-  weatherGround(farmApproach(scene,b),air.uniforms);
-  const villageTreesClear=plantValley(scene,b,leaves),village=dressVillage(scene,b);
-  grass(scene);b.finish();
+  weatherGround(terrain(villageRoot,b),air.uniforms);buildings(villageRoot,b);bridge(b);
+  weatherGround(farmApproach(villageRoot,b),air.uniforms);
+  const villageTreesClear=plantValley(villageRoot,b,leaves),village=dressVillage(villageRoot,b);
+  b.finish();
+  const villageEffects=[];
+  villageRoot.traverse(group=>{if(group.userData.fires||group.userData.smokeSources)villageEffects.push(group);});
   const farmSaveKey='briarwick-commons-farm-v1';
-  let savedFarm=null;
-  try{savedFarm=JSON.parse(localStorage.getItem(farmSaveKey));}catch{}
-  const woodlandRoot=new T.Group();scene.add(woodlandRoot);
-  const woodland=buildWoodland(woodlandRoot,leaves),castle=buildCastle(scene,air.waterMaterial),catacomb=buildCatacomb(scene),farmScene=buildFarm(scene,leaves,savedFarm,()=>mine.state.forge.tools.bronzeSickle,animalTrack);
+  const savedFarm=store.read(farmSaveKey);
+  const woodlandRoot=createRegionRoot(scene,'woodland'),castleRoot=createRegionRoot(scene,'castle');
+  const catacombRoot=createRegionRoot(scene,'catacomb'),farmRoot=createRegionRoot(scene,'farm');
+  const woodland=buildWoodland(woodlandRoot,leaves),castle=buildCastle(castleRoot,air.waterMaterial),catacomb=buildCatacomb(catacombRoot),farmScene=buildFarm(farmRoot,leaves,savedFarm,()=>mine.state.forge.tools.bronzeSickle,animalTrack);
   const wildlifeClear=(x,z,animalHeight)=>walkable(x,z)&&woodland.clear(x,z,animalHeight)&&
     (x>53||villageTreesClear(x,z)&&village.walkable(x,z));
   const hunting=buildHunting(scene,camera,height,wildlifeClear,woodlandRoot,()=>resize(),animalTrack);
   const mineKey='briarwick-ore-mine-v1';
-  let savedMine=null;
-  try{savedMine=JSON.parse(localStorage.getItem(mineKey));}catch{}
-  const mine=buildMine(scene,savedMine);
+  const savedMine=store.read(mineKey),mineRoot=createRegionRoot(scene,'mine');
+  const mine=buildMine(mineRoot,savedMine);
   let mineSnapshot=JSON.stringify(mine.snapshot()),cartHeading=0,oreMessage='',oreMessageUntil=0;
   function saveMine(){
     const next=JSON.stringify(mine.snapshot());
-    if(next!==mineSnapshot)try{localStorage.setItem(mineKey,next);mineSnapshot=next;}catch{}
+    if(next!==mineSnapshot&&store.write(mineKey,mine.snapshot()))mineSnapshot=next;
   }
   window.addEventListener('pagehide',saveMine);
-  const lakeScene=buildLake(scene,camera,air.waterMaterial,()=>resize(),(strong,weak,duration)=>{
+  const lakeRoot=createRegionRoot(scene,'lake');
+  grass(villageRoot,{farm:farmRoot,woodland:woodlandRoot,lakeshore:lakeRoot});
+  const lakeScene=buildLake(lakeRoot,camera,air.waterMaterial,()=>resize(),(strong,weak,duration)=>{
     if(el('padRumble').checked)gamepad.pulse(strong,weak,duration);
   });
   const {vehicle,work:farmWork}=farmScene;
@@ -104,69 +118,32 @@ function start(){
   let farmSavedRevision=farmWork.revision,saveIn=8;
   function saveFarm(){
     if(farmSavedRevision===farmWork.revision)return;
-    try{localStorage.setItem(farmSaveKey,JSON.stringify(farmWork.snapshot()));farmSavedRevision=farmWork.revision;}catch{}
+    if(store.write(farmSaveKey,farmWork.snapshot()))farmSavedRevision=farmWork.revision;
   }
   window.addEventListener('pagehide',saveFarm);
+  window.briarwickWorld=createWorldInspector({
+    editPlacement(id,placement){
+      const current=store.read(placementKey),objects=current?.version===1&&current.objects?current.objects:{};
+      const saved=proposeWorldPlacement(id,placement);
+      if(!store.write(placementKey,{version:1,objects:{...objects,[id]:saved}}))throw new Error('Could not save the development placement');
+      location.reload();return saved;
+    },
+    resetPlacements(){const removed=store.remove(placementKey);if(removed)location.reload();return removed;}
+  });
   const tickWheel=buildMillWheel(scene,drive);
+  bindCoreWorldCatalog({castle,farm:farmScene,lake:lakeScene,mine,woodland,millWheel:tickWheel});
   const weatherSelect=el('weather'),weatherStatus=el('weatherStatus');
   weatherSelect.onchange=()=>weather.select(weatherSelect.value);
   const homePos=v(12.2,23.8,55),homeTarget=v(-5.9,2.85,-1.5);
   const orbit=new OrbitControls(camera,canvas);orbit.enablePan=false;orbit.enableDamping=true;orbit.dampingFactor=.095;orbit.minDistance=4;orbit.maxDistance=74;orbit.minPolarAngle=.3;orbit.maxPolarAngle=Math.PI*.485;
   camera.position.copy(homePos);orbit.target.copy(homeTarget);orbit.update();
 
-  // A soft radial sprite lets the lanterns fade without hard edges.
-  const cv=document.createElement('canvas');cv.width=cv.height=64;const cx=cv.getContext('2d');
-  const grad=cx.createRadialGradient(32,32,0,32,32,32);grad.addColorStop(0,'white');grad.addColorStop(.35,'rgba(255,255,255,.65)');grad.addColorStop(1,'rgba(255,255,255,0)');cx.fillStyle=grad;cx.fillRect(0,0,64,64);
-  const soft=new T.CanvasTexture(cv);
-  const lampGeo=new T.BufferGeometry().setFromPoints(lamps);
-  const halo=new T.PointsMaterial({color:'#ffbf70',size:1.35,map:soft,transparent:true,blending:T.AdditiveBlending,depthWrite:false});
-  scene.add(new T.Points(lampGeo,halo));
-  // Ground pools stay inexpensive even when the entire village is in view.
-  const pools=lamps.map(p=>{const m=new T.Mesh(new T.PlaneGeometry(3.3,3.3),new T.MeshBasicMaterial({map:soft,color:'#e6ab64',blending:T.AdditiveBlending,transparent:true,depthWrite:false}));
-    m.position.set(p.x,height(p.x,p.z)+.065,p.z);
-    const dx=(height(p.x+.1,p.z)-height(p.x-.1,p.z))/.2,dz=(height(p.x,p.z+.1)-height(p.x,p.z-.1))/.2;
-    m.quaternion.setFromUnitVectors(v(0,0,1),v(-dx,1,-dz).normalize());scene.add(m);return m;});
-  const birdPos=new Float32Array(9*4*3),birdG=new T.BufferGeometry();
-  birdG.setAttribute('position',new T.BufferAttribute(birdPos,3));const birds=new T.LineSegments(birdG,new T.LineBasicMaterial({color:'#606954'}));birds.frustumCulled=false;scene.add(birds);
-  function ambientMotion(t,dt,weatherState) {
-    const {gust}=weatherState;
-    for(const m of moving)m.hub.rotation[m.axis]+=dt*m.speed*(.53+gust);
-    for(let i=0;i<9;i++){const a=t*.048+i*.21,x=-1+Math.cos(a)*12+i*.8,z=-24+Math.sin(a)*6+i*.78,y=13+Math.sin(a*2.3+i)*.58,flap=Math.sin(t*4.5+i*2)*.13+.07;
-      birdPos.set([x-.28,y+flap,z,x,y,z+.05,x,y,z+.05,x+.28,y+flap,z],i*12);}
-    birdG.attributes.position.needsUpdate=true;
-  }
-  const daysky=new T.Color('#d9dfdc'),nightsky=new T.Color('#9aa9c6'),dayground=new T.Color('#7b7864'),nightground=new T.Color('#434853'),sunDay=new T.Color('#e6dfca'),sunDusk=new T.Color('#df9163'),sunNight=new T.Color('#a9b6d0'),fogDay=new T.Color('#b0b4a6'),fogDusk=new T.Color('#a58b74'),fogNight=new T.Color('#444d60');
-  const vaultFog=new T.Color('#3b3640');
-  const rainFog=new T.Color('#858f93'),lightning=new T.Color('#b3cefa');
-  let hour=12,desiredHour=null,shadowHour=-24;
-  function light(h){
-    hour=((h%24)+24)%24;
-    for(const {hand,kind} of clockHands)hand.rotation.z=-TAU*(kind==='hour'?hour/12:hour%1);
-    const night=1-smooth(4.6,7.45,hour)* (1-smooth(17.5,20.65,hour));
-    const dusk=Math.max(1-smooth(0,2.6,Math.abs(hour-18.35)),1-smooth(0,2.1,Math.abs(hour-6.75)))*.89;
-    air.uniforms.night.value=night;air.uniforms.dusk.value=dusk;
-    hemi.color.copy(daysky).lerp(nightsky,night);hemi.groundColor.copy(dayground).lerp(nightground,night);hemi.intensity=1.55-night*1.29;
-    sun.color.copy(sunDay).lerp(sunDusk,dusk).lerp(sunNight,night);sun.intensity=2.03-night*1.77;
-    const arc=(hour-6)*Math.PI/12,east=Math.cos(arc),alt=Math.sin(arc);
-    const solar=air.uniforms.solarDirection.value.set(.84*east-.39*alt,.84*alt,.54*east+.54*alt).normalize();
-    if(Math.abs(hour-shadowHour)>.18){
-      sun.position.copy(solar).multiplyScalar((solar.y<0?-1:1)*48);
-      sun.position.y=Math.max(4,sun.position.y);sun.position.add(sun.target.position);
-      renderer.shadowMap.needsUpdate=true;shadowHour=hour;
-    }
-    scene.fog.color.copy(fogDay).lerp(fogDusk,dusk*.8).lerp(fogNight,night);scene.fog.density=.012+night*.011;
-    glass.emissiveIntensity=.019+night*1.7;halo.opacity=night*.65;for(const pool of pools)pool.material.opacity=night*.42;
-    birds.visible=night<.6;el('hour').value=hour;
-    const mins=Math.floor(hour*60+.001);el('time').textContent=String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
-    el('phase').textContent=night>.78?'Nightfall':hour<8.2?'Dawn':hour>=17.4?'Dusk':'Daylight';
-    document.querySelectorAll('[data-hour]').forEach(n=>n.classList.toggle('chosen',Math.abs(+n.dataset.hour-hour)<.15));
-  }
+  const daylight=buildDaylight({scene,renderer,air,hemi,sun,clock:el('hour'),clockText:el('time'),phase:el('phase'),presets:document.querySelectorAll('[data-hour]')});
+  let hour=12,desiredHour=null;
+  function light(h){hour=daylight.setHour(h);}
   light(12);
   const tourSaveKey='briarwick-tour-checkpoint-v1';
-  let tourCheckpoint=null;
-  try{
-    tourCheckpoint=restoreTourCheckpoint(JSON.parse(localStorage.getItem(tourSaveKey)));
-  }catch{}
+  let tourCheckpoint=restoreTourCheckpoint(store.read(tourSaveKey));
   let mode='orbit',flight=null,tourTime=0,tourStop=null,yaw=0,pitch=0,drag=null,lastWalk=null;
   const keys=new Set(),rooms=new Map();
   const castlePlace={id:'castle',name:'Thornmere Castle'};
@@ -321,7 +298,7 @@ function start(){
   }
   function useDoor(){
     if(doorButton.hidden)return;
-    if(interaction){interaction();checkDoor(false);}
+    if(interaction){interaction.perform();checkDoor(false);}
     else if(interior)leaveInterior();
     else if(doorPlot){
       const destination=doorPlot;
@@ -332,63 +309,64 @@ function start(){
   }
   doorButton.onclick=useDoor;
   function checkDoor(moving){
-    let label='';interaction=null;
+    let label='',actionId='';interaction=null;
     if(mode!=='walk'){
       doorPlot=mode==='orbit'&&!flight?landmark:null;
-      if(doorPlot)label=doorPlot===castlePlace?'Walk to the castle gate':'Enter '+doorPlot.name;
+      if(doorPlot){label=doorPlot===castlePlace?'Walk to the castle gate':'Enter '+doorPlot.name;actionId=doorPlot===castlePlace?'castle.enter':actionIds.village.enter;}
     }else if(interior){
       doorPlot=null;
       const atDoor=floorY<.15&&Math.abs(camera.position.x)<.96&&camera.position.z>interior.entryZ-1.18&&Math.cos(yaw)<-.18;
-      if(atDoor){label='Step outside';if(moving&&Math.abs(camera.position.x)<.61&&camera.position.z>interior.entryZ+.09){leaveInterior();return;}}
-      else if(atForge()){label='Work at the forge';interaction=useForge;}
+      if(atDoor){label='Step outside';actionId=actionIds.village.leave;if(moving&&Math.abs(camera.position.x)<.61&&camera.position.z>interior.entryZ+.09){leaveInterior();return;}}
+      else if(atForge()){label='Work at the forge';interaction=createAction(actionIds.village.forge,label,useForge,{objectId:`room:${interior.plot.id}:workshop`});}
       else if(floorY<.15&&interior.sluice&&Math.hypot(camera.position.x-interior.sluice.x,camera.position.z-interior.sluice.z)<1.75){
-        label=drive.sluice?'Close the armory sluice':'Open the armory sluice';interaction=()=>drive.toggle();
+        label=drive.sluice?'Close the armory sluice':'Open the armory sluice';interaction=createAction(actionIds.village.sluice,label,()=>drive.toggle(),{objectId:'mill:sluice'});
       }
     }else{
       doorPlot=null;
       const railTask=mine.interaction(camera.position.x,camera.position.z,exteriorY);
-      if(railTask){label=railTask.label;interaction=()=>handleMine(railTask.perform());}
+      if(railTask){label=railTask.label;interaction=createAction(railTask.id??actionIds.mine.perform,label,()=>handleMine(railTask.perform()),{objectId:railTask.objectId??'region:mine'});}
       if(!railTask&&exteriorY<walkHeight(camera.position.x,camera.position.z)-.75&&mine.at(camera.position.x,camera.position.z,exteriorY,.5)){
         doorButton.hidden=true;
         return;
       }
       const game=hunting.active?hunting.nearbyHarvest(camera.position.x,camera.position.z):null;
-      if(game){label='Collect '+game.spec.name;interaction=()=>hunting.harvest(game);}
+      if(game){label='Collect '+game.spec.name;interaction=createAction(actionIds.hunting.harvest,label,()=>hunting.harvest(game),{objectId:'region:woodland',metadata:{species:game.spec.name}});}
       const boatAction=lakeScene.interact(camera.position.x,camera.position.z);
-      if(boatAction){label=boatAction;interaction=()=>{
+      if(boatAction){label=boatAction;interaction=createAction(actionIds.lake.boat,label,()=>{
         const aboard=lakeScene.toggleBoard();keys.clear();drag=null;
         if(aboard){yaw=lakeScene.boat.yaw;pitch=-.09;camera.rotation.set(pitch,yaw,0,'YXZ');}
         else returnToJetty();
         refreshHint();
-      };}
+      },{objectId:'lake:boat'});}
       if(!label&&castle.nearby(camera.position.x,camera.position.z)){
         const x=camera.position.x-estate.x,z=camera.position.z-estate.z,y=exteriorY-estate.y;
         label=castle.bridge.action(x,z,y);
-        if(label)interaction=()=>castle.bridge.toggle();
-        else if((label=castle.dragon.action(x,z,y)))interaction=()=>showConversation(castle.dragon.talk());
+        if(label)interaction=createAction(actionIds.castle.bridge,label,()=>castle.bridge.toggle(),{objectId:'castle:drawbridge'});
+        else if((label=castle.dragon.action(x,z,y)))interaction=createAction(actionIds.castle.dragon,label,()=>showConversation(castle.dragon.talk()),{objectId:'castle:dragon'});
       }
       for(const p of interaction?[]:plots){
         const door=doorstep(p,0),dx=camera.position.x-door.x,dz=camera.position.z-door.z;
         const across=dx*Math.cos(p.a)-dz*Math.sin(p.a),inFront=dx*Math.sin(p.a)+dz*Math.cos(p.a);
         if(Math.abs(across)>.98||inFront<-.13||inFront>1.92||Math.cos(yaw-p.a)<.12)continue;
-        doorPlot=p;label='Enter '+p.name;
+        doorPlot=p;label='Enter '+p.name;actionId=actionIds.village.enter;
         if(moving&&Math.abs(across)<.53&&inFront<.39){enterInterior(p);return;}break;
       }
       if(!label&&Math.hypot(camera.position.x-village.sluice.x,camera.position.z-village.sluice.z)<1.90){
-        label=drive.sluice?'Close the armory sluice':'Open the armory sluice';interaction=()=>drive.toggle();
+        label=drive.sluice?'Close the armory sluice':'Open the armory sluice';interaction=createAction(actionIds.village.sluice,label,()=>drive.toggle(),{objectId:'mill:sluice'});
       }
       if(!label){
         const {x,z}=camera.position;
         const task=farmScene.nearbyTask(x,z,yaw);
-        if(task){label=task.label;interaction=()=>{
+        if(task){label=task.label;interaction=createAction(task.id??actionIds.farm.perform,label,()=>{
           const mounted=vehicle.mounted;
           informFarm(task.perform());
           if(!mounted&&vehicle.mounted){chaseYaw=chasePitch=0;keys.clear();tractorCamera(true);refreshHint();}
           updateFarmPanel();
-        };}
+        },{objectId:task.objectId??'region:farm'});}
       }
     }
     doorButton.hidden=!label;
+    doorButton.dataset.actionId=interaction?.id??actionId;
     if(label&&doorButton.lastElementChild.textContent!==label)doorButton.lastElementChild.textContent=label;
   }
   const speedControl=el('tourSpeed'),padSpeed=el('padTourSpeed');
@@ -422,7 +400,7 @@ function start(){
   function rememberTour(){
     const state=tourHandoff(tourTime);
     tourCheckpoint={time:state.time,rate:playbackRate};
-    try{localStorage.setItem(tourSaveKey,JSON.stringify(tourCheckpoint));}catch{}
+    store.write(tourSaveKey,tourCheckpoint);
     return state;
   }
   function updateTourAction(){
@@ -470,40 +448,12 @@ function start(){
   function enterWalk(x=.55,z=17.3,a=.10,p=.035,ground=walkHeight(x,z)){
     modeUI('walk');exteriorY=ground;setPose(x,exteriorY+1.57,z,a,p);steps.reset(x,z);canvas.focus({preventScroll:true});
   }
-  function nearbySpots(x,z,max=6,step=.3){
-    const points=[{x,z}];
-    for(let radius=step;radius<=max+.001;radius+=step){
-      const count=Math.max(12,Math.ceil(radius*Math.PI*2/step));
-      for(let i=0;i<count;i++){const angle=i*Math.PI*2/count;points.push({x:x+Math.cos(angle)*radius,z:z+Math.sin(angle)*radius});}
-    }
-    return points;
-  }
-  function resolveRoomHandoff(state,room){
-    if(!room)return null;
-    for(const point of nearbySpots(state.x,state.z,2.4,.18)){
-      const floor=room.nextFloor(point.x,point.z,state.floor);
-      if(floor!==null&&Math.abs(floor-state.floor)<.03)return {...point,floor};
-    }
-    return null;
-  }
-  function resolveOutdoorHandoff(state){
-    for(const point of nearbySpots(state.x,state.z)){
-      const ground=walkHeight(point.x,point.z),preferred=state.floor??ground;
-      let floor=null;
-      if(state.domain==='castle')floor=castle.next(point.x,point.z,preferred,ground);
-      else if(state.domain==='catacomb')floor=catacomb.next(point.x,point.z,preferred,ground);
-      else if(state.domain==='mine')floor=mine.next(point.x,point.z,preferred,ground);
-      else if(atLake(point.x,point.z))floor=walkable(point.x,point.z)&&lakeScene.clear(point.x,point.z)?ground:null;
-      else floor=walkable(point.x,point.z)&&farmScene.clear(point.x,point.z)&&woodland.clear(point.x,point.z)&&villageTreesClear(point.x,point.z)&&village.walkable(point.x,point.z)?ground:null;
-      if(floor!==null&&(state.floor===null||Math.abs(floor-state.floor)<.4))return {...point,floor};
-    }
-    return null;
-  }
+  const traversal=createTraversal({castle,catacomb,mine,lakeScene,farmScene,woodland,villageTreesClear,village,walkable,walkHeight,atLake});
   function handoffTour(){
     if(mode!=='tour')return;
     const state=rememberTour();
-    const roomSpot=state.domain==='room'?resolveRoomHandoff(state,interior):null;
-    const outdoorSpot=!['room','lake'].includes(state.domain)?resolveOutdoorHandoff(state):null;
+    const roomSpot=state.domain==='room'?traversal.resolveRoomHandoff(state,interior):null;
+    const outdoorSpot=!['room','lake'].includes(state.domain)?traversal.resolveOutdoorHandoff(state):null;
     if((state.domain==='room'&&!roomSpot)||(!['room','lake'].includes(state.domain)&&!outdoorSpot))return;
     modeUI('walk');
     if(state.domain==='room'){
@@ -533,7 +483,7 @@ function start(){
   el('tour').onclick=()=>mode==='tour'?handoffTour():startTour();
   function restartTour(){
     tourCheckpoint=null;
-    try{localStorage.removeItem(tourSaveKey);}catch{}
+    store.remove(tourSaveKey);
     startTour();
   }
   window.addEventListener('pagehide',()=>{if(mode==='tour')rememberTour();});
@@ -541,145 +491,33 @@ function start(){
   orbit.addEventListener('start',()=>{flight=null;landmark=null;checkDoor(false);});
   el('hour').oninput=e=>{if(mode==='tour')overlook();desiredHour=null;light(+e.target.value);};
   document.querySelectorAll('[data-hour]').forEach(n=>n.onclick=()=>{if(mode==='tour')overlook();desiredHour=+n.dataset.hour;});
-  function closePlaces(){el('places').setAttribute('aria-expanded','false');el('placeList').hidden=true;}
-  for(const p of [{id:'home',name:'Village overlook'},...plots]){
-    const btn=document.createElement('button');btn.type='button';btn.textContent=p.name;
-    btn.onclick=()=>{closePlaces();if(p.id==='home'){overlook(true);return;}
-      const target=v(p.x,p.y+(p.id==='wind'?3.8:p.h*.58),p.z);
-      if(mode==='walk'){
-        const spot=doorstep(p,1.5);enterWalk(spot.x,spot.z,p.a,0);checkDoor(false);return;
-      }
-      if(mode!=='orbit')overlook();orbit.maxDistance=74;const dist=p.id==='wind'||p.id==='tower'?11:8.5;
-      const pos=v(p.x+Math.sin(p.a+.45)*dist,p.y+4.4,p.z+Math.cos(p.a+.45)*dist);
-      pos.y=Math.max(pos.y,height(pos.x,pos.z)+2.0);landmark=p;fly(pos,target);
-    };el('placeList').append(btn);
-  }
-  const entrances=new Map([['#play',enterWalk],['#tour',startTour]]);
-  for(const [name,x,z,a,tilt] of [['Woodland trail',trailhead.x,trailhead.z,trailYaw,0],['Thornmere Castle',estate.x,estate.z+41,0,.10]]){
-    const btn=document.createElement('button');btn.textContent=name;
-    btn.onclick=()=>{
-      closePlaces();
-      if(name===castlePlace.name&&mode!=='walk'){
-        modeUI('orbit');orbit.maxDistance=100;landmark=castlePlace;
-        fly(v(estate.x+37,estate.y+31,estate.z+66),v(estate.x,estate.y+5.5,estate.z+1),1.55);
-      }else enterWalk(x,z,a,tilt);
-    };
-    entrances.set(name===castlePlace.name?'#thornmere-castle':'#woodland-trail',btn.onclick);
-    el('placeList').append(btn);
-  }
-  for(const [name,x,z,y,a,p] of [['King’s chamber',7.48,-10.42,4.8,-.92,.02],['Dragon viewing gallery',-5.8,-12.3,-10.45,-2.79,-.17]]){
-    const button=document.createElement('button');button.type='button';button.textContent=name;
-    button.onclick=()=>{closePlaces();enterWalk(estate.x+x,estate.z+z,a,p,estate.y+y);checkDoor(false);};
-    el('placeList').append(button);
-  }
-  function destination(name,go){
-    const button=document.createElement('button');button.type='button';button.textContent=name;
-    button.onclick=()=>{closePlaces();go();};el('placeList').append(button);return button.onclick;
-  }
-  entrances.set('#dragon-hoard',destination('Dragon hoard',()=>enterWalk(estate.x+10.4,estate.z-9.4,2.23,.21,estate.y-16)));
-  entrances.set('#briar-crypts',destination(catacomb.name,()=>enterWalk(catacomb.entry.x,catacomb.entry.z,catacomb.entry.yaw,-.14)));
-  entrances.set('#ore-mine',destination(mine.name,()=>{
-    const vein=mine.state.veins[0],point=minePoint(vein.progress),cart=mine.cart.pose;
-    enterWalk(point.x,point.z,Math.atan2(point.x-cart.x,point.z-cart.z),-.17,point.y);checkDoor(false);
-  }));
-  entrances.set('#armory-rail-yard',destination('Blacksmith rail yard',()=>{
-    const p=mine.yard,x=p.x+5.1,z=p.z+4.2;
-    enterWalk(x,z,Math.atan2(x-mine.portal.x,z-mine.portal.z),.08,walkHeight(x,z));checkDoor(false);
-  }));
-  entrances.set('#blacksmith-forge',destination('Blacksmith forge',()=>{
-    modeUI('walk');enterInterior(plots.find(p=>p.id==='mill'));
-    const {anvil}=interior.forge;
-    setPose(anvil.x+1.15,1.57,anvil.z+.85,.94,-.18);checkDoor(false);
-  }));
-  const lakeEntrance=destination(lake.name,()=>{
-    enterWalk(dock.x,dock.near+3.8,Math.PI-.15,-.075);checkDoor(false);
-  });
-  entrances.set('#alder-lake',lakeEntrance);
-  entrances.set('#alder-falls',destination('Alder Falls',()=>{
-    modeUI('orbit');orbit.maxDistance=90;
-    fly(v(falls.x+14,26,falls.z-43),v(falls.x+2,12,falls.z+6),1.4);
-  }));
-  for(const [i,site] of forestSites.entries()){
-    const visit=destination(i===0?'Pinewood hunting trail':site.name,()=>{
-      const p=hunting.arrival(i);
-      enterWalk(p.x,p.z,p.yaw,p.pitch);
-    });
-    entrances.set(i===0?'#pinewood-hunting':'#'+site.name.toLowerCase().replaceAll(' ','-'),visit);
-  }
-  const farmEntrance=destination(farm.name,()=>enterWalk(farm.entry.x,farm.entry.z,farm.entry.a,.045));
-  entrances.set('#commons-farm',farmEntrance);
-  destination('Dairy stalls',()=>{enterWalk(-86.5,27.96,1.33,-.09);checkDoor(false);});
-  entrances.set('#crop-fields',destination('Crop fields',()=>enterWalk(-100.5,61.7,2.34,-.13)));
-  destination('Farm tractor',()=>{
-    const {x,z,yaw:heading}=vehicle.pose;
-    const at=vehicle.mounted?vehicle.dismount(true):null;
-    const spaces=[[x+1.65,z],[x-1.65,z],[x,z-1.87],[x,z+2.0]];
-    const spot=spaces.find(([xx,zz])=>inFarm(xx,zz)&&farmScene.clear(xx,zz));
-    enterWalk(spot?.[0]??at?.x??farm.entry.x,spot?.[1]??at?.z??farm.entry.z,spot?Math.atan2(spot[0]-x,spot[1]-z):heading,-.05);checkDoor(false);
-  });
-  for(const [name,site] of [['Water tower',farmStations.water],['Hen house',farmStations.eggs],['Hen trough',farmStations.troughs[1]],['Cattle trough',farmStations.troughs[0]],['Pig trough',farmStations.troughs[2]],['Grain bin',farmStations.feed]]){
-    destination(name,()=>{enterWalk(site.x,site.z-1.10,Math.PI,-.13);checkDoor(false);});
-  }
-  entrances.set('#pig-wallow',destination('Pig wallow',()=>enterWalk(-59.5,40.4,-.88,-.25)));
-  destination('Farm overlook',()=>{
-    modeUI('orbit');orbit.maxDistance=137;const {x,y,z}=farm.overview;
-    fly(v(x+15,y,z+6),v(-78,1.1,54),1.55);
-  });
-  const wheelEntrance=destination('Mill wheel',()=>{
-    const x=millWheel.x-5.85,z=millWheel.z+4.25;
-    if(mode==='walk')enterWalk(x,z,-1.20,-.12);
-    else{modeUI('orbit');fly(v(x,5.15,z),v(millWheel.x,millWheel.y,millWheel.z),1.15);}
-  });
-  entrances.set('#mill-wheel',wheelEntrance);
-  entrances.set('#brook',destination('Brook riffles',()=>enterWalk(riverX(29.8)+2.65,29.8,.49,-.29)));
-  entrances.set('#brook-spring',destination('Brook spring',()=>enterWalk(riverX(springZ)+3.7,springZ+4.8,.66,-.22)));
-  destination('Restart tour',restartTour);
-  el('places').onclick=()=>{const open=el('placeList').hidden;el('placeList').hidden=!open;el('places').setAttribute('aria-expanded',open);};
-  document.addEventListener('pointerdown',e=>{if(!e.target.closest('.dock'))closePlaces();});
-  const guide=el('guide');el('help').onclick=()=>guide.showModal();el('closeHelp').onclick=()=>guide.close();
-  const controllerMenu=el('controllerMenu'),placeMenu=el('placeList'),controllerWeather=el('padWeather'),controllerHour=el('padHour');
-  controllerWeather.replaceChildren(...Array.from(weatherSelect.options,option=>option.cloneNode(true)));
-  controllerWeather.onchange=()=>{weatherSelect.value=controllerWeather.value;weather.select(weatherSelect.value);};
-  controllerHour.oninput=()=>{if(mode==='tour')overlook();desiredHour=null;light(+controllerHour.value);};
-  el('closeController').onclick=()=>controllerMenu.close();
-  el('padWalk').onclick=()=>{controllerMenu.close();el('walk').click();};
-  el('padTour').onclick=()=>{controllerMenu.close();el('tour').click();};
-  el('padHelp').onclick=()=>{controllerMenu.close();guide.showModal();};
-  el('padHud').onclick=()=>{controllerMenu.close();hideUI();};
-  el('padPlaces').onclick=()=>{controllerMenu.close();openPlacesWithPad();};
-  controllerMenu.addEventListener('close',()=>{if(placeMenu.hidden&&!guide.open)canvas.focus({preventScroll:true});});
-
-  function openPlacesWithPad(){
-    if(document.body.classList.contains('clean'))hideUI();
-    if(placeMenu.hidden)el('places').click();
-    placeMenu.querySelector('button')?.focus();
-  }
-  function openController(){
-    closePlaces();keys.clear();drag=null;
-    controllerHour.value=hour;controllerWeather.value=weatherSelect.value;
-    controllerMenu.showModal();el('padPlaces').focus();
-  }
-  function moveMenuFocus(root,input){
-    const choices=Array.from(root.querySelectorAll('button,input,select')).filter(node=>!node.disabled&&node.getClientRects().length);
-    if(!choices.length)return;
-    let current=choices.indexOf(document.activeElement);
-    if(input.up||input.down){
-      current=current<0?0:(current+(input.up?-1:1)+choices.length)%choices.length;
-      choices[current].focus();choices[current].scrollIntoView({block:'nearest'});return;
+  const openEntrance=installPlaces({catacomb,mine,hunting,farmScene,navigation:{
+    enterWalk,startTour,restartTour,checkDoor,overlook,isWalking:()=>mode==='walk',
+    showView(position,target,duration,maxDistance){
+      modeUI('orbit');if(maxDistance!==undefined)orbit.maxDistance=maxDistance;fly(position,target,duration);
+    },
+    visitBuilding(plot){
+      if(mode==='walk'){const spot=doorstep(plot,1.5);enterWalk(spot.x,spot.z,plot.a,0);checkDoor(false);return;}
+      if(mode!=='orbit')overlook();orbit.maxDistance=74;landmark=plot;
+      const distance=plot.id==='wind'||plot.id==='tower'?11:8.5;
+      const position=v(plot.x+Math.sin(plot.a+.45)*distance,plot.y+4.4,plot.z+Math.cos(plot.a+.45)*distance);
+      position.y=Math.max(position.y,height(position.x,position.z)+2);
+      fly(position,v(plot.x,plot.y+(plot.id==='wind'?3.8:plot.h*.58),plot.z));
+    },
+    visitCastle(){
+      if(mode==='walk'){enterWalk(estate.x,estate.z+41,0,.10);return;}
+      modeUI('orbit');orbit.maxDistance=100;landmark=castlePlace;
+      fly(v(estate.x+37,estate.y+31,estate.z+66),v(estate.x,estate.y+5.5,estate.z+1),1.55);
+    },
+    visitForge(){
+      modeUI('walk');enterInterior(plots.find(p=>p.id==='mill'));
+      const {anvil}=interior.forge;setPose(anvil.x+1.15,1.57,anvil.z+.85,.94,-.18);checkDoor(false);
     }
-    const focus=choices[current]??choices[0];
-    if(input.left||input.right){
-      const direction=input.left?-1:1;
-      if(focus.tagName==='SELECT'){
-        focus.selectedIndex=(focus.selectedIndex+direction+focus.options.length)%focus.options.length;
-        focus.dispatchEvent(new Event('change',{bubbles:true}));
-      }else if(focus.type==='range'){
-        if(direction>0)focus.stepUp();else focus.stepDown();
-        focus.dispatchEvent(new Event('input',{bubbles:true}));
-      }else if(focus.type==='checkbox')focus.click();
-    }
-    if(input.confirm||input.interact)focus.click();
-  }
+  }});
+  const {guide,controllerMenu,placeMenu,openPlacesWithPad,openController,moveMenuFocus}=setupControllerMenu({
+    canvas,weatherSelect,hideUI,currentTime:()=>hour,selectWeather:value=>weather.select(value),
+    clearMovement(){keys.clear();drag=null;},setTime(value){if(mode==='tour')overlook();desiredHour=null;light(value);}
+  });
   const hemisphere=new T.Spherical(),orbitOffset=v(0,0,0),pan=v(0,0,0);
   function pollController(dt){
     const wasConnected=padInput.connected;padInput=gamepad.poll(dt);
@@ -802,27 +640,10 @@ function start(){
       if(roomName.textContent!==location)roomName.textContent=location;
       checkDoor(f>0);return;
     }
-    const outdoorStep=(xx,zz)=>{
-      const ground=walkHeight(xx,zz);
-      const insideCatacomb=catacomb.at(camera.position.x,camera.position.z,exteriorY,.7);
-      const inMine=mine.nearby(camera.position.x,camera.position.z)&&mine.at(camera.position.x,camera.position.z,exteriorY,.45);
-      if(mine.nearby(xx,zz)){
-        const floor=mine.next(xx,zz,exteriorY,ground);
-        if(floor!==null&&Math.abs(floor-exteriorY)<.32&&(inMine||insideCatacomb||Math.hypot(xx-mine.yard.x,zz-mine.yard.z)<5.5))return floor;
-      }
-      if(catacomb.nearby(xx,zz)){
-        const floor=catacomb.next(xx,zz,exteriorY,ground);
-        if(insideCatacomb||floor!==null&&Math.abs(floor-exteriorY)<.32)return floor;
-      }
-      if(inMine&&Math.abs(ground-exteriorY)>.5)return null;
-      if(atLake(xx,zz))return walkable(xx,zz)&&lakeScene.clear(xx,zz)?ground:null;
-      if(castle.nearby(xx,zz))return castle.next(xx,zz,exteriorY,ground);
-      return walkable(xx,zz)&&farmScene.clear(xx,zz)&&woodland.clear(xx,zz)&&villageTreesClear(xx,zz)&&village.walkable(xx,zz)?ground:null;
-    };
     const dx=x-camera.position.x,dz=z-camera.position.z,n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.12));
     for(let i=0;i<n;i++){
-      if(dx){const xx=camera.position.x+dx/n,h=outdoorStep(xx,camera.position.z);if(h!==null){camera.position.x=xx;exteriorY=h;}}
-      if(dz){const zz=camera.position.z+dz/n,h=outdoorStep(camera.position.x,zz);if(h!==null){camera.position.z=zz;exteriorY=h;}}
+      if(dx){const xx=camera.position.x+dx/n,h=traversal.nextFloor(xx,camera.position.z,camera.position.x,camera.position.z,exteriorY);if(h!==null){camera.position.x=xx;exteriorY=h;}}
+      if(dz){const zz=camera.position.z+dz/n,h=traversal.nextFloor(camera.position.x,zz,camera.position.x,camera.position.z,exteriorY);if(h!==null){camera.position.z=zz;exteriorY=h;}}
     }
     camera.position.y=T.MathUtils.lerp(camera.position.y,exteriorY+1.57,1-Math.exp(-dt*15));
     const xx=camera.position.x,zz=camera.position.z;
@@ -837,7 +658,6 @@ function start(){
   }
   function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.fov=lakeScene.scoped||hunting.scoped?(innerWidth<innerHeight?15:11):interior?(innerWidth<innerHeight?78:68):(innerWidth<innerHeight?59:46);camera.updateProjectionMatrix();}
   window.addEventListener('resize',resize);resize();
-  const openEntrance=()=>entrances.get(location.hash)?.();
   window.addEventListener('hashchange',openEntrance);openEntrance();
   let t=0,previous=performance.now(),drawn=false;
   document.addEventListener('visibilitychange',()=>{previous=performance.now();});
@@ -884,15 +704,7 @@ function start(){
     air.uniforms.wind.value=w.gust;
     air.uniforms.runoff.value=brookFlow;
     drive.step(dt,brookFlow);air.uniforms.raceFlow.value=drive.flow;air.uniforms.raceLevel.value=drive.level-millWheel.waterline;
-    sun.color.copy(sunDay).lerp(sunDusk,air.uniforms.dusk.value).lerp(sunNight,night).lerp(lightning,w.flash);
-    sun.intensity=((2.43-night*2.20)*(1-w.cloud*.68)+w.flash*3.15)*(1-depth*.95);
-    hemi.intensity=((1.52-night*1.20)*(1-w.cloud*.21)+w.flash*.65)*(1-depth)+.72*depth;
-    const distanceEast=smooth(28,86,anchor.x);
-    scene.fog.density=.0065-distanceEast*.0018+night*.008+Math.pow(w.mist,1.64)*.023*(1-depth)+depth*.012;
-    scene.fog.color.copy(fogDay).lerp(fogDusk,air.uniforms.dusk.value*.8).lerp(rainFog,w.cloud*.50).lerp(fogNight,night).lerp(lightning,w.flash*.20).lerp(vaultFog,depth);
-    air.uniforms.waterFog.value.copy(scene.fog.color);air.uniforms.waterFogDensity.value=scene.fog.density;
-    air.uniforms.sunDirection.value.subVectors(sun.position,sun.target.position).normalize();
-    air.uniforms.sunTint.value.copy(sun.color);
+    daylight.weather(w,night,depth,anchor.x);
     // Below the ceiling, exterior geometry and its lights cannot contribute.
     const buried=mode==='walk'&&!interior&&camera.position.y<walkHeight(camera.position.x,camera.position.z)-3.0;
     const renderLayer=shotLayer||mineLayer||(buried&&catacombDepth>0?2:buried&&castleDepth>0&&exteriorY<estate.y-8?1:0);
@@ -925,9 +737,9 @@ function start(){
       const notice=performance.now()<oreMessageUntil?oreMessage:'';
       if(el('mineMessage').textContent!==notice)el('mineMessage').textContent=notice;
     }
-    air.sky.position.copy(camera.position);air.uniforms.clock.value=t;ambientMotion(t,dt,w);
+    air.sky.position.copy(camera.position);air.uniforms.clock.value=t;daylight.ambientMotion(t,dt,w);
     const player=mode==='walk'&&!interior&&!vehicle.mounted?camera.position:null;
-    tickWheel(dt,interior?null:camera.position);village.tick(t,w.gust,drive.gate);birds.visible=night<.6&&w.rain<.36;
+    tickWheel(dt,interior?null:camera.position);village.tick(t,w.gust,drive.gate);
     if(!interior&&camera.position.x<-22)farmScene.tick(t,dt,w.gust,player);
     const paused=smithy.open||guide.open||conversation.open||controllerMenu.open||!placeMenu.hidden||!document.hasFocus();
     updateFarmPanel();lakeScene.tick(dt,t,w,mode==='walk'&&!interior&&!vehicle.mounted,paused);
@@ -935,14 +747,14 @@ function start(){
     const nearActors=vehicle.mounted||hunting.active||inFarm(camera.position.x,camera.position.z)||atLake(camera.position.x,camera.position.z);
     const shadowInterval=nearActors ? .24 : .65;
     if(!paused&&!interior&&!depth&&t-shadowRefresh>shadowInterval){renderer.shadowMap.needsUpdate=true;shadowRefresh=t;}
-    footprints.tick(dt,w,mode==='walk'&&!interior&&!mineLayer?camera.position:null);animateFires(scene,t);
-    if(!interior)stepSmoke(scene,dt,t,w.gust,camera.position,viewport,night);
+    footprints.tick(dt,w,mode==='walk'&&!interior&&!mineLayer?camera.position:null);
+    if(!interior)for(const group of villageEffects){animateFires(group,t);stepSmoke(group,dt,t,w.gust,camera.position,viewport,night);}
     const castleRoom=observingWorld&&castle.nearby(camera.position.x,camera.position.z)?castle.area(camera.position.x,camera.position.z,floor):'';
     const sheltered=depth>.36||catacombDepth>.08||(castleRoom&&!['Thornmere Castle','Castle courtyard','Battlements','Gatehouse'].includes(castleRoom))||!!player&&farmSheltered(player.x,player.z);
     tickWeatherEffects(camera.position,dt,w,!!interior||sheltered,mode==='walk');
     if(interior){
       interior.light(night,w.cloud,w.flash);interior.animate(t,hour,drive);
-      stepSmoke(interior.scene,dt,t,0,camera.position,viewport,night);
+      interior.stepSmoke(dt,t,camera.position,viewport,night);
       if(!Number.isFinite(windowHour)||((Math.abs(windowHour-hour)>.035||Math.abs(windowCloud-w.cloud)>.11)&&now-lastCapture>700)){
         captureWindows(interior);windowHour=hour;windowCloud=w.cloud;lastCapture=now;renderer.shadowMap.needsUpdate=true;
       }

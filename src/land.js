@@ -110,10 +110,10 @@ export function terrain(root,b) {
   return soilMesh(ground);
 }
 const grassZones=Object.freeze([
-  Object.freeze({name:'village',minX:-54.25,maxX:54.25,minZ:-54.25,maxZ:54.25,seed:0x3ca71}),
-  Object.freeze({name:'farm',minX:-111.5,maxX:-44.5,minZ:10.5,maxZ:92.5,seed:0xfa471}),
-  Object.freeze({name:'woodland',minX:54.25,maxX:216,minZ:-101,maxZ:61,seed:0x70dd5}),
-  Object.freeze({name:'lakeshore',minX:-35,maxX:96,minZ:54.25,maxZ:146,seed:0x113af}),
+  Object.freeze({name:'village',minX:-54.25,maxX:54.25,minZ:-54.25,maxZ:54.25}),
+  Object.freeze({name:'farm',minX:-111.5,maxX:-44.5,minZ:10.5,maxZ:92.5}),
+  Object.freeze({name:'woodland',minX:54.25,maxX:216,minZ:-101,maxZ:61}),
+  Object.freeze({name:'lakeshore',minX:-35,maxX:96,minZ:54.25,maxZ:146}),
 ]);
 
 export function grassAllowed(x,z,zone){
@@ -127,8 +127,8 @@ export function grassAllowed(x,z,zone){
   return false;
 }
 
-export function grass(root) {
-  const meshes=grassZones.map(zone=>meadowMesh(root,zone,height,grassAllowed));
+export function grass(root,regions={}) {
+  const meshes=grassZones.map(zone=>meadowMesh(regions[zone.name]??root,zone,height,grassAllowed));
   return {meshes,stats:Object.freeze(Object.fromEntries(meshes.map(mesh=>[mesh.userData.grassZone,mesh.geometry.index.count/3])))};
 }
 export function bridge(b) {
